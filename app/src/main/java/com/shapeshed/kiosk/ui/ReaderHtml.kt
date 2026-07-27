@@ -36,6 +36,7 @@ fun buildReaderHtml(
     contentHtml: String,
     palette: ReaderPalette,
     fontFaceCss: String = "",
+    readerFontFamily: String = "Newsreader",
     topPadPx: Int = 8,
 ): String {
     val heading = title?.takeIf { it.isNotBlank() }?.let { "<h1>${escapeHtml(it)}</h1>" }.orEmpty()
@@ -53,7 +54,7 @@ fun buildReaderHtml(
           body {
             background: ${palette.background};
             color: ${palette.foreground};
-            font-family: 'Newsreader', Georgia, Charter, 'Times New Roman', 'Noto Serif', serif;
+            font-family: $readerFontFamily, Georgia, Charter, 'Times New Roman', 'Noto Serif', serif;
             font-size: 20px;
             line-height: 1.7;
             max-width: 38rem;

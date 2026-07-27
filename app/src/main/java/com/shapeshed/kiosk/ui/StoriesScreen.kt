@@ -96,7 +96,7 @@ private val FEEDS = Feed.entries
 @Composable
 fun StoriesScreen(
     selectedStoryId: Long?,
-    onOpenStory: (Long) -> Unit,
+    onOpenStory: (Long, ArticleRendererOverride?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val app = LocalContext.current.applicationContext as KioskApp
@@ -222,7 +222,12 @@ fun StoriesScreen(
                 onOpenStory = { id ->
                     searchViewModel.markViewed(id)
                     scope.launch { searchBarState.animateToCollapsed() }
-                    onOpenStory(id)
+                    onOpenStory(id, null)
+                },
+                onOpenStoryWithRenderer = { id, renderer ->
+                    searchViewModel.markViewed(id)
+                    scope.launch { searchBarState.animateToCollapsed() }
+                    onOpenStory(id, renderer)
                 },
                 viewModel = searchViewModel,
             )
@@ -272,6 +277,7 @@ private fun SearchResultsPane(
     onFilterChange: (SearchFilter) -> Unit,
     onSortChange: (SearchSort) -> Unit,
     onOpenStory: (Long) -> Unit,
+    onOpenStoryWithRenderer: (Long, ArticleRendererOverride) -> Unit,
     viewModel: SearchViewModel,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -306,6 +312,7 @@ private fun SearchResultsPane(
                         loadingMore = loadingMore,
                         onLoadMore = viewModel::loadMore,
                         onOpenStory = onOpenStory,
+                        onOpenStoryWithRenderer = onOpenStoryWithRenderer,
                     )
                 }
             }
@@ -365,7 +372,7 @@ private fun selectedIcon(selected: Boolean): (@Composable () -> Unit)? =
 private fun FeedPane(
     feed: Feed,
     selectedStoryId: Long?,
-    onOpenStory: (Long) -> Unit,
+    onOpenStory: (Long, ArticleRendererOverride?) -> Unit,
     viewModel: StoriesViewModel = viewModel(
         key = "feed-${feed.name}",
         factory = StoriesViewModel.factory(feed),
@@ -393,7 +400,11 @@ private fun FeedPane(
                     onLoadMore = viewModel::loadMore,
                     onOpenStory = { id ->
                         viewModel.markViewed(id)
-                        onOpenStory(id)
+                        onOpenStory(id, null)
+                    },
+                    onOpenStoryWithRenderer = { id, renderer ->
+                        viewModel.markViewed(id)
+                        onOpenStory(id, renderer)
                     },
                 )
             }
@@ -410,6 +421,7 @@ private fun StoryList(
     loadingMore: Boolean,
     onLoadMore: () -> Unit,
     onOpenStory: (Long) -> Unit,
+    onOpenStoryWithRenderer: (Long, ArticleRendererOverride) -> Unit = { id, _ -> onOpenStory(id) },
 ) {
     val listState = rememberLazyListState()
     // Load the next page once the last few rows come into view.
@@ -441,6 +453,8 @@ private fun StoryList(
                     RectangleShape
                 },
                 onClick = { onOpenStory(story.id) },
+                onOpenWebReader = { onOpenStoryWithRenderer(story.id, ArticleRendererOverride.WEB_READER) },
+                onOpenNativeReader = { onOpenStoryWithRenderer(story.id, ArticleRendererOverride.NATIVE_READER) },
             )
         }
         if (loadingMore) {
@@ -460,6 +474,8 @@ private fun StoryCard(
     viewed: Boolean,
     shape: Shape,
     onClick: () -> Unit,
+    onOpenWebReader: () -> Unit,
+    onOpenNativeReader: () -> Unit,
 ) {
     val titleColor = when {
         selected -> MaterialTheme.colorScheme.onSecondaryContainer
@@ -494,6 +510,12 @@ private fun StoryCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                }
+            },
+            trailingContent = {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    TextButton(onClick = onOpenWebReader) { Text("Web") }
+                    TextButton(onClick = onOpenNativeReader) { Text("Native") }
                 }
             },
         ) {

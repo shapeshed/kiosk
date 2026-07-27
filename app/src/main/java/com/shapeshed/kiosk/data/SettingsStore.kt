@@ -14,12 +14,16 @@ import kotlinx.coroutines.flow.map
 /** Reader appearance choice; SYSTEM follows the device light/dark setting. */
 enum class ReaderTheme { SYSTEM, LIGHT, DARK, SEPIA }
 
+/** Reader body typeface choice. Monospace remains reserved for code blocks. */
+enum class ReaderFont { NEWSREADER, LITERATA, ATKINSON, SYSTEM_SANS }
+
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 /** Persisted user settings, backed by Preferences DataStore. */
 class SettingsStore(private val context: Context) {
 
     private val readerThemeKey = stringPreferencesKey("reader_theme")
+    private val readerFontKey = stringPreferencesKey("reader_font")
     private val readerModeKey = booleanPreferencesKey("reader_mode")
     private val viewedKey = stringSetPreferencesKey("viewed_story_ids")
     private val selectedFeedKey = stringPreferencesKey("selected_feed")
@@ -41,6 +45,16 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setReaderTheme(theme: ReaderTheme) {
         context.dataStore.edit { it[readerThemeKey] = theme.name }
+    }
+
+    val readerFont: Flow<ReaderFont> = context.dataStore.data.map { prefs ->
+        prefs[readerFontKey]
+            ?.let { runCatching { ReaderFont.valueOf(it) }.getOrNull() }
+            ?: ReaderFont.NEWSREADER
+    }
+
+    suspend fun setReaderFont(font: ReaderFont) {
+        context.dataStore.edit { it[readerFontKey] = font.name }
     }
 
     /** Whether articles open in reader view (vs the raw web page). Defaults to reader. */

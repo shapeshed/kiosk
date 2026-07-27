@@ -26,9 +26,10 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
 fun KioskListDetail() {
-    val navigator = rememberListDetailPaneScaffoldNavigator<Long>()
+    val navigator = rememberListDetailPaneScaffoldNavigator<String>()
     val scope = rememberCoroutineScope()
-    val selectedId = navigator.currentDestination?.contentKey
+    val selectedDestination = navigator.currentDestination?.contentKey?.toArticleDestinationOrNull()
+    val selectedId = selectedDestination?.storyId
 
     NavigableListDetailPaneScaffold(
         navigator = navigator,
@@ -36,18 +37,24 @@ fun KioskListDetail() {
             AnimatedPane {
                 StoriesScreen(
                     selectedStoryId = selectedId,
-                    onOpenStory = { id ->
-                        scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, id) }
+                    onOpenStory = { id, renderer ->
+                        scope.launch {
+                            navigator.navigateTo(
+                                ListDetailPaneScaffoldRole.Detail,
+                                ArticleDestination(storyId = id, renderer = renderer).toNavigationKey(),
+                            )
+                        }
                     },
                 )
             }
         },
         detailPane = {
             AnimatedPane {
-                val storyId = navigator.currentDestination?.contentKey
-                if (storyId != null) {
+                val destination = navigator.currentDestination?.contentKey?.toArticleDestinationOrNull()
+                if (destination != null) {
                     ArticleScreen(
-                        storyId = storyId,
+                        storyId = destination.storyId,
+                        rendererOverride = destination.renderer,
                         showBack = navigator.canNavigateBack(),
                         onBack = { scope.launch { navigator.navigateBack() } },
                     )
@@ -57,6 +64,33 @@ fun KioskListDetail() {
             }
         },
     )
+}
+
+data class ArticleDestination(
+    val storyId: Long,
+    val renderer: ArticleRendererOverride? = null,
+)
+
+enum class ArticleRendererOverride {
+    WEB_READER,
+    NATIVE_READER,
+}
+
+private fun ArticleDestination.toNavigationKey(): String =
+    when (renderer) {
+        ArticleRendererOverride.WEB_READER -> "$storyId:web"
+        ArticleRendererOverride.NATIVE_READER -> "$storyId:native"
+        null -> storyId.toString()
+    }
+
+private fun String.toArticleDestinationOrNull(): ArticleDestination? {
+    val storyId = substringBefore(':').toLongOrNull() ?: return null
+    val renderer = when (substringAfter(':', missingDelimiterValue = "")) {
+        "web" -> ArticleRendererOverride.WEB_READER
+        "native" -> ArticleRendererOverride.NATIVE_READER
+        else -> null
+    }
+    return ArticleDestination(storyId = storyId, renderer = renderer)
 }
 
 @Composable
