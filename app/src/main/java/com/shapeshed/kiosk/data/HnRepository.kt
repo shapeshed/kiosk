@@ -28,6 +28,18 @@ class HnRepository(private val api: HnApi) {
         api.itemJson(id)?.let(::parseStoryJson)
     }
 
+    suspend fun search(
+        query: String,
+        filter: SearchFilter,
+        sort: SearchSort,
+        page: Int,
+        pageSize: Int,
+    ): SearchPage = withContext(Dispatchers.IO) {
+        api.searchJson(query, filter, sort, page, pageSize)
+            ?.let(::parseSearchPageJson)
+            ?: SearchPage(emptyList(), page = page, totalPages = 0)
+    }
+
     /**
      * The story's comments as a flattened, depth-annotated thread. Fetches the tree breadth-first
      * (each level concurrently) up to [maxTotal] comments, then orders it depth-first for display.

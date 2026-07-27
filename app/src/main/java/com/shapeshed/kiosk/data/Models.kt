@@ -29,3 +29,22 @@ data class FlatComment(
     val comment: Comment,
     val depth: Int,
 )
+
+data class SearchPage(
+    val stories: List<Story>,
+    val page: Int,
+    val totalPages: Int,
+)
+
+enum class SearchSort {
+    RELEVANCE,
+    DATE,
+}
+
+enum class SearchFilter(val tag: String?) {
+    ALL("(story,job)"),
+    STORIES("story"),
+    ASK("ask_hn"),
+    SHOW("show_hn"),
+    JOBS("job"),
+}
