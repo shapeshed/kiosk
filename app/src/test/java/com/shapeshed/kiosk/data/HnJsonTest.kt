@@ -55,6 +55,60 @@ class HnJsonTest {
     }
 
     @Test
+    fun parseSearchPageReadsAlgoliaHits() {
+        val page = parseSearchPageJson(
+            """
+            {
+              "hits": [
+                {
+                  "objectID": "42",
+                  "title": "Launch",
+                  "url": "https://example.com/launch",
+                  "author": "pg",
+                  "points": 12,
+                  "num_comments": 3,
+                  "created_at_i": 1700000000
+                }
+              ],
+              "page": 1,
+              "nbPages": 9
+            }
+            """.trimIndent(),
+        )
+        requireNotNull(page)
+        assertEquals(1, page.page)
+        assertEquals(9, page.totalPages)
+        assertEquals(42L, page.stories.single().id)
+        assertEquals("Launch", page.stories.single().title)
+        assertEquals(12, page.stories.single().score)
+        assertEquals(3, page.stories.single().descendants)
+    }
+
+    @Test
+    fun parseSearchPageFallsBackToStoryTitleAndDecodesText() {
+        val page = parseSearchPageJson(
+            """
+            {
+              "hits": [
+                {
+                  "objectID": "43",
+                  "story_title": "Ask HN",
+                  "author": "alice",
+                  "story_text": "a &#x27;b&#x27;",
+                  "created_at_i": 1
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+        requireNotNull(page)
+        val story = page.stories.single()
+        assertEquals("Ask HN", story.title)
+        assertNull(story.url)
+        assertEquals("a 'b'", story.text)
+    }
+
+    @Test
     fun parseCommentPreservesFlags() {
         val comment = parseComment(
             JSONObject("""{"id":9,"by":"alice","time":123,"text":"&gt; hi","kids":[1],"dead":true}"""),

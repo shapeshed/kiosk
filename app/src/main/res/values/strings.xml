@@ -15,6 +15,17 @@
     <string name="couldnt_load">Couldn\'t load stories.</string>
     <string name="couldnt_load_comments">Couldn\'t load comments.</string>
     <string name="no_comments">No comments yet.</string>
+    <string name="search_hint">Search Hacker News</string>
+    <string name="clear_search">Clear search</string>
+    <string name="search_empty_hint">Search historical Hacker News stories.</string>
+    <string name="no_search_results">No results found.</string>
+    <string name="search_sort_relevance">Relevant</string>
+    <string name="search_sort_date">Newest</string>
+    <string name="search_filter_all">All</string>
+    <string name="search_filter_stories">Stories</string>
+    <string name="search_filter_ask">Ask HN</string>
+    <string name="search_filter_show">Show HN</string>
+    <string name="search_filter_jobs">Jobs</string>
     <string name="back">Back</string>
     <string name="open_in_browser">Open in browser</string>
     <string name="reader_view">Reader view</string>

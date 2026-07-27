@@ -45,8 +45,10 @@ Run just the unit tests:
 - `KioskApp` owns the app's few long-lived singletons by hand — no DI framework. It builds the
   shared OkHttp client (with a disk HTTP cache) and the `HnRepository`, and is Coil's image-loader
   factory so favicons load through the same client.
-- Data source is the official read-only [Hacker News API](https://github.com/HackerNews/API) over
-  OkHttp — no key, no auth. It's N+1 by nature; the repository fans requests out on `Dispatchers.IO`.
+- Feed and article data come from the official read-only [Hacker News API](https://github.com/HackerNews/API)
+  over OkHttp — no key, no auth. It's N+1 by nature; the repository fans requests out on
+  `Dispatchers.IO`. Historical search uses the unauthenticated [Algolia HN Search API](https://hn.algolia.com/api)
+  via the same OkHttp client.
 - Pure logic (JSON parsing, comment-thread flattening, HTML→text, relative time, host extraction)
   lives in `data/` as plain functions and is unit-tested — keep it free of Android/Compose types.
 - UI is Jetpack Compose with an adaptive `NavigableListDetailPaneScaffold` (list on phones,
@@ -61,6 +63,9 @@ Run just the unit tests:
 - Prefer Material 3 / Material 3 Expressive components and patterns already used in the app rather
   than introducing custom interaction styles. Check styling against the M3 spec (tab labels, shape,
   colour roles) rather than approximating.
+- Search follows the same Material 3 contained search bar pattern as Aerial: collapsed
+  `SearchBar`, expanded `ExpandedFullScreenContainedSearchBar`, and `FilterChip` controls for
+  result filters.
 - Colour is adaptive: dynamic (wallpaper-derived) on Android 12+, the expressive baseline scheme
   otherwise. Read text/icon colours from the same `MaterialTheme.colorScheme` roles as their
   backgrounds — no hard-coded `Color.Black`/`Color.White` over themed surfaces.

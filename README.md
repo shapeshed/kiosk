@@ -1,10 +1,10 @@
 # Kiosk
 
-A calm Hacker News reader for Android.
+Kiosk is a calm Hacker News reader for Android.
 
-Kiosk shows the Hacker News feeds and their discussions, and opens articles in a built-in,
-distraction-free reader. That's it — no accounts, no analytics, no tracking SDKs, no sexy features.
-Boring, stable tech chosen to last.
+It shows the Hacker News feeds and their discussions, searches historical stories, and opens
+articles in a built-in, distraction-free reader. That's it — no accounts, no analytics, no tracking
+SDKs, no sexy features. Boring, stable tech chosen to last.
 
 ## Stack
 
@@ -12,6 +12,7 @@ Boring, stable tech chosen to last.
   otherwise)
 - The official read-only [Hacker News API](https://github.com/HackerNews/API) over OkHttp — no
   key, no auth
+- The unauthenticated [Algolia HN Search API](https://hn.algolia.com/api) for historical search
 - Adaptive list-detail layout (list on phones, list+article on tablets/foldables), plain
   `ViewModel`s; no DI framework
 - `minSdk 26`, Java/Kotlin 17

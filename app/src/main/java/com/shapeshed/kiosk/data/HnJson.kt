@@ -53,6 +53,38 @@ fun parseStoryJson(body: String): Story? =
 fun parseCommentJson(body: String): Comment? =
     runCatching { parseComment(JSONObject(body)) }.getOrNull()
 
+fun parseSearchPageJson(body: String): SearchPage? =
+    runCatching {
+        val root = JSONObject(body)
+        val hits = root.optJSONArray("hits") ?: JSONArray()
+        SearchPage(
+            stories = (0 until hits.length()).mapNotNull { index ->
+                parseSearchHit(hits.getJSONObject(index))
+            },
+            page = root.optInt("page"),
+            totalPages = root.optInt("nbPages"),
+        )
+    }.getOrNull()
+
+private fun parseSearchHit(o: JSONObject): Story? {
+    val id = o.optLong("objectID", 0L).takeIf { it != 0L } ?: return null
+    val title = o.optString("title")
+        .ifBlank { o.optString("story_title") }
+        .takeIf { it.isNotBlank() }
+        ?: return null
+    return Story(
+        id = id,
+        title = title,
+        url = o.optString("url").takeIf { it.isNotBlank() },
+        by = o.optString("author"),
+        score = o.optInt("points"),
+        descendants = o.optInt("num_comments"),
+        time = o.optLong("created_at_i"),
+        kids = emptyList(),
+        text = o.optString("story_text").takeIf { it.isNotBlank() }?.let(::decodeHtml),
+    )
+}
+
 /**
  * Flatten a comment tree depth-first into the order HN displays it — each comment immediately
  * followed by its replies, indented one level deeper. Comments missing from [byId] (unfetched or
