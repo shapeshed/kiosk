@@ -264,8 +264,10 @@ private fun Element.hasHiddenReaderMarker(): Boolean {
     return classNames().any { className ->
         val name = className.lowercase()
         name == "hidden" ||
+            name == "invisible" ||
             name == "sr-only" ||
             name == "visually-hidden" ||
+            name == "visuallyhidden" ||
             name == "screen-reader-text"
     }
 }

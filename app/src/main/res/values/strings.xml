@@ -30,6 +30,11 @@
     <string name="open_in_browser">Open in browser</string>
     <string name="reader_view">Reader view</string>
     <string name="web_view">Web view</string>
+    <string name="reader_tools">Reader tools</string>
+    <string name="use_default_reader">Use default reader setting</string>
+    <string name="speed_reader">Speed Reader</string>
+    <string name="compare_web_reader">Compare Web reader</string>
+    <string name="compare_native_reader">Compare native reader</string>
     <string name="reader_unavailable">Reader view unavailable for this page.</string>
     <string name="select_story">Select a story</string>
     <string name="appearance">Appearance</string>

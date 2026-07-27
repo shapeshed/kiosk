@@ -120,6 +120,8 @@ class ReaderDocumentTest {
                 <div aria-hidden="true">Modified today</div>
                 <ul style="display: none"><li>tag-one</li><li>tag-two</li></ul>
                 <p class="screen-reader-text">Hidden label</p>
+                <p class="invisible">Invisible label</p>
+                <p class="visuallyhidden">Visually hidden label</p>
             """.trimIndent(),
             baseUrl = "https://example.com/story/",
         ).blocks
