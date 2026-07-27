@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">Kiosk</string>
+    <string name="feed_top">Top</string>
+    <string name="feed_new">New</string>
+    <string name="feed_best">Best</string>
+    <string name="feed_ask">Ask</string>
+    <string name="feed_show">Show</string>
+    <string name="feed_jobs">Jobs</string>
+    <string name="comments">Comments</string>
+    <plurals name="comments_count">
+        <item quantity="one">%d comment</item>
+        <item quantity="other">%d comments</item>
+    </plurals>
+    <string name="retry">Retry</string>
+    <string name="couldnt_load">Couldn\'t load stories.</string>
+    <string name="couldnt_load_comments">Couldn\'t load comments.</string>
+    <string name="no_comments">No comments yet.</string>
+    <string name="back">Back</string>
+    <string name="open_in_browser">Open in browser</string>
+    <string name="reader_view">Reader view</string>
+    <string name="web_view">Web view</string>
+    <string name="reader_unavailable">Reader view unavailable for this page.</string>
+    <string name="select_story">Select a story</string>
+    <string name="appearance">Appearance</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_sepia">Sepia</string>
+</resources>

@@ -1,0 +1,5 @@
+<resources>
+    <!-- Hacker News orange — the app's seed colour and splash background. -->
+    <color name="kiosk_orange">#FF6600</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

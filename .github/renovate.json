@@ -1,0 +1,19 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":rebaseStalePrs",
+    ":prConcurrentLimit10"
+  ],
+  "labels": [
+    "dependencies",
+    "renovate"
+  ],
+  "enabledManagers": [
+    "gradle",
+    "github-actions"
+  ],
+  "timezone": "UTC",
+  "dependencyDashboard": true
+}

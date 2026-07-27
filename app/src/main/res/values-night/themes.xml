@@ -1,0 +1,8 @@
+<resources>
+
+    <!-- Dark-mode window background so there's no white flash before Compose draws. -->
+    <style name="Theme.Kiosk" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+
+</resources>

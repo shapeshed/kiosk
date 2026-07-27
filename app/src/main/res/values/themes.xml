@@ -1,0 +1,16 @@
+<resources>
+
+    <!-- Base application theme. The real colours come from MaterialExpressiveTheme in Compose;
+         this only styles the window before Compose draws. -->
+    <style name="Theme.Kiosk" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+
+    <!-- Launch theme via androidx.core:core-splashscreen. -->
+    <style name="Theme.Kiosk.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/kiosk_orange</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Kiosk</item>
+    </style>
+
+</resources>

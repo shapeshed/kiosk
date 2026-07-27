@@ -1,0 +1,1 @@
+-keep class com.shapeshed.kiosk.data.** { *; }
