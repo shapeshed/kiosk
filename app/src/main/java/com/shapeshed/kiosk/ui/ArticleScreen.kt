@@ -1,22 +1,51 @@
 package com.shapeshed.kiosk.ui
 
-import android.app.Activity
+import android.annotation.SuppressLint
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.pdf.PdfRenderer
+import android.app.PendingIntent
+import android.content.Intent
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.media.MediaMetadata
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.ParcelFileDescriptor
+import android.os.SystemClock
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import android.view.WindowManager
 import android.view.ViewGroup
 import android.webkit.WebView
+import android.webkit.WebChromeClient
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -39,6 +68,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -49,9 +80,15 @@ import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Button
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,18 +96,28 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.WavyProgressIndicatorDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
@@ -79,9 +126,11 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -100,6 +149,7 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -111,21 +161,32 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.shapeshed.kiosk.KioskApp
+import com.shapeshed.kiosk.MainActivity
 import com.shapeshed.kiosk.R
+import com.shapeshed.kiosk.data.DefaultViewer
 import com.shapeshed.kiosk.data.FlatComment
 import com.shapeshed.kiosk.data.ReaderFont
 import com.shapeshed.kiosk.data.ReaderTheme
 import com.shapeshed.kiosk.data.ReaderArticle
 import com.shapeshed.kiosk.data.ReaderBlock
+import com.shapeshed.kiosk.data.ReaderExtractionEntity
 import com.shapeshed.kiosk.data.ReaderInline
 import com.shapeshed.kiosk.data.Story
 import com.shapeshed.kiosk.data.hostOf
 import com.shapeshed.kiosk.data.parseReaderArticle
 import com.shapeshed.kiosk.data.relativeTime
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONObject
 import org.json.JSONTokener
+import java.io.BufferedInputStream
+import java.io.File
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 // Clone the page, run Readability on it, and hand back {t: title, c: contentHtml} — or "" on failure.
 private const val EXTRACT_JS =
@@ -146,20 +207,48 @@ fun ArticleScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     rendererOverride: ArticleRendererOverride? = null,
+    storyIds: List<Long> = emptyList(),
+    previousStoryId: Long? = null,
+    nextStoryId: Long? = null,
+    onOpenAdjacentStory: (Long) -> Unit = {},
+    showChrome: Boolean = true,
+    enableStoryPager: Boolean = true,
+    allowWebView: Boolean = true,
+    onArticleScroll: (Int) -> Unit = {},
+    externalReadAloudBlockIndex: Int? = null,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as KioskApp
+    var activeStoryId by rememberSaveable { mutableLongStateOf(storyId) }
+    LaunchedEffect(storyId) {
+        activeStoryId = storyId
+    }
+    val activeStoryIndex = storyIds.indexOf(activeStoryId)
+    val effectivePreviousStoryId = if (activeStoryIndex >= 0) {
+        storyIds.getOrNull(activeStoryIndex - 1)
+    } else {
+        previousStoryId
+    }
+    val effectiveNextStoryId = if (activeStoryIndex >= 0) {
+        storyIds.getOrNull(activeStoryIndex + 1)
+    } else {
+        nextStoryId
+    }
+    val activeRendererOverride = if (activeStoryId == storyId) rendererOverride else null
     val viewModel: ArticleViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
-        key = "article-$storyId",
-        factory = remember(storyId) { ArticleViewModel.factory(app, storyId) },
+        key = "article-$activeStoryId",
+        factory = remember(activeStoryId) { ArticleViewModel.factory(app, activeStoryId) },
     )
     val storyState by viewModel.story.collectAsStateWithLifecycle()
     val commentsState by viewModel.comments.collectAsStateWithLifecycle()
     val story = (storyState as? UiState.Content)?.data
+    val storyUrl = story?.url
     val darkTheme = isSystemInDarkTheme()
     val scope = rememberCoroutineScope()
     val readerTheme by app.settings.readerTheme.collectAsStateWithLifecycle(ReaderTheme.SYSTEM)
     val readerFont by app.settings.readerFont.collectAsStateWithLifecycle(ReaderFont.NEWSREADER)
+    val readAloudSpeechRate by app.settings.readAloudSpeechRate.collectAsStateWithLifecycle(1f)
+    val readAloudVoiceName by app.settings.readAloudVoiceName.collectAsStateWithLifecycle(null)
     val palette = readerPaletteFor(readerTheme, darkTheme)
     val fontFaceCss = rememberReaderFontFaceCss(readerFont)
     // Matches the reader stylesheet background (see buildReaderHtml) so covers/flash are seamless.
@@ -172,21 +261,50 @@ fun ArticleScreen(
 
     // Reader vs web is a persisted preference (applies to every article); readerFailed is a
     // per-article fallback to web when Readability can't extract this page.
-    val readerModePref by app.settings.readerModeEnabled.collectAsStateWithLifecycle(true)
-    var readerFailed by remember(storyId) { mutableStateOf(false) }
-    var selectedRendererOverride by remember(storyId, rendererOverride) { mutableStateOf(rendererOverride) }
-    val readerMode = selectedRendererOverride != null || (readerModePref && !readerFailed)
+    val defaultViewer by app.settings.defaultViewer.collectAsStateWithLifecycle(DefaultViewer.READER)
+    var readerFailed by remember(activeStoryId) { mutableStateOf(false) }
+    var selectedRendererOverride by remember(activeStoryId, activeRendererOverride) {
+        mutableStateOf(activeRendererOverride)
+    }
+    val pdfArticleUrl = remember(story?.url) { story?.url?.renderablePdfUrlOrNull() }
+    val isPdfArticle = pdfArticleUrl != null
+    val forceWebArticle = remember(story?.url) { story?.url?.requiresWebView() == true }
+    val forceWebPage = selectedRendererOverride == ArticleRendererOverride.WEB_PAGE ||
+        (selectedRendererOverride == null && defaultViewer == DefaultViewer.WEB)
+    val readerMode = !isPdfArticle && !forceWebArticle &&
+        !forceWebPage &&
+        (selectedRendererOverride != null || (defaultViewer == DefaultViewer.READER && !readerFailed))
     val forceWebReader = selectedRendererOverride == ArticleRendererOverride.WEB_READER
     val forceNativeReader = selectedRendererOverride == ArticleRendererOverride.NATIVE_READER
-    var extracted by remember(storyId) { mutableStateOf<ReaderExtraction?>(null) }
-    var pageReady by remember(storyId) { mutableStateOf(false) }
-    var readerShown by remember(storyId) { mutableStateOf(false) }
-    var openedLinkUrl by remember(storyId) { mutableStateOf<String?>(null) }
-    val nativeReaderListState = remember(storyId) { LazyListState() }
+    var extracted by remember(activeStoryId) { mutableStateOf<ReaderExtraction?>(null) }
+    var pageReady by remember(activeStoryId) { mutableStateOf(false) }
+    var readerShown by remember(activeStoryId) { mutableStateOf(false) }
+    var openedLinkUrl by remember(activeStoryId) { mutableStateOf<String?>(null) }
+    val nativeReaderListState = remember(activeStoryId) { LazyListState() }
     var showAppearance by remember { mutableStateOf(false) }
-    var showReaderMenu by remember(storyId) { mutableStateOf(false) }
-    var showSpeedReader by rememberSaveable(storyId) { mutableStateOf(false) }
-    var pendingSpeedReader by remember(storyId) { mutableStateOf(false) }
+    var showReaderMenu by remember(activeStoryId) { mutableStateOf(false) }
+    var showSpeedReader by rememberSaveable(activeStoryId) { mutableStateOf(false) }
+    var pendingSpeedReader by remember(activeStoryId) { mutableStateOf(false) }
+    var showReadAloud by rememberSaveable { mutableStateOf(false) }
+    var readAloudAutoPlayKey by rememberSaveable { mutableLongStateOf(0L) }
+    var pendingReadAloud by remember(activeStoryId) { mutableStateOf(false) }
+    var currentReadAloudBlockIndex by remember(activeStoryId) { mutableStateOf<Int?>(null) }
+    val readerCacheGeneration = ReaderExtractionCache.generation
+    LaunchedEffect(storyUrl, readerCacheGeneration) {
+        val memoryCached = storyUrl?.let { ReaderExtractionCache.get(activeStoryId, it) }
+        val diskCached = if (memoryCached == null) {
+            app.readerExtractions.get(activeStoryId)?.takeIf { it.url == storyUrl }?.toReaderExtraction()
+        } else {
+            null
+        }
+        val cached = memoryCached ?: diskCached
+        if (cached != null) {
+            if (diskCached != null) storyUrl?.let { ReaderExtractionCache.put(activeStoryId, it, diskCached) }
+            extracted = cached
+            pageReady = true
+            readerShown = true
+        }
+    }
     // Rebuilt whenever the extracted article OR the palette/font changes, so an appearance change
     // re-themes the article you're currently reading (not just the next one).
     val readerHtml = remember(extracted, palette, fontFaceCss, readerFont, story?.url, readerTopPad) {
@@ -213,6 +331,7 @@ fun ArticleScreen(
         }
     }
     val speedReadWords = remember(extracted) { extracted?.textContent?.speedReadWords().orEmpty() }
+    val readAloudSegments = remember(readerArticle) { readerArticle?.readAloudSegments().orEmpty() }
     val readyNativeReaderArticle = if (readerMode && !forceWebReader && readerArticle?.blocks?.isNotEmpty() == true) {
         readerArticle
     } else {
@@ -223,30 +342,38 @@ fun ArticleScreen(
     // Instagram-style: the bar shows on launch, then slides up off-screen (and the app goes
     // immersive) when scrolling down, and slides back on scrolling up. The bar OVERLAYS the
     // content (not the scaffold's top slot), so animating it never relayouts the WebView.
-    var barVisible by remember(storyId) { mutableStateOf(true) }
+    var barVisible by remember(activeStoryId) { mutableStateOf(true) }
     // The reader hides its bar on scroll (immersive); the web view keeps the bar pinned so the
     // page can sit padded below it with no gap.
-    val effectiveBarVisible = !showSpeedReader && (!readerMode || barVisible)
+    val immersiveEligible = !isPdfArticle && !forceWebArticle && !forceWebPage && !readerFailed
+    val effectiveBarVisible = showChrome && !showSpeedReader && (!immersiveEligible || barVisible)
     // Previous WebView scroll position — tracked here because the View callback's oldScrollY is
     // unreliable for a WebView. Plain holder (no snapshot) so scroll events don't recompose.
-    val lastScrollY = remember(storyId) { intArrayOf(0) }
+    val lastScrollY = remember(activeStoryId) { intArrayOf(0) }
 
     // Comments are summoned from the top bar, not always on screen — so the reader stays clean.
-    var showComments by remember(storyId) { mutableStateOf(false) }
+    var showComments by remember(activeStoryId) { mutableStateOf(false) }
     // System bars follow the app bar: visible together, and hidden together (immersive) when the
     // user scrolls down — the native "immersive" API, tied to scroll direction like Instagram.
     val view = LocalView.current
-    val insetsController = remember(view) {
-        (view.context as? Activity)?.window?.let { WindowCompat.getInsetsController(it, view) }
+    val activity = LocalActivity.current
+    val insetsController = remember(view, activity) {
+        activity?.window?.let { WindowCompat.getInsetsController(it, view) }
     }
-    DisposableEffect(insetsController) {
-        insetsController?.systemBarsBehavior =
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        onDispose { insetsController?.show(WindowInsetsCompat.Type.systemBars()) }
+    DisposableEffect(insetsController, showChrome) {
+        if (showChrome) {
+            insetsController?.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+        onDispose {
+            if (showChrome) insetsController?.show(WindowInsetsCompat.Type.systemBars())
+        }
     }
-    LaunchedEffect(effectiveBarVisible) {
-        if (effectiveBarVisible) insetsController?.show(WindowInsetsCompat.Type.systemBars())
-        else insetsController?.hide(WindowInsetsCompat.Type.systemBars())
+    LaunchedEffect(effectiveBarVisible, showChrome) {
+        if (showChrome) {
+            if (effectiveBarVisible) insetsController?.show(WindowInsetsCompat.Type.systemBars())
+            else insetsController?.hide(WindowInsetsCompat.Type.systemBars())
+        }
     }
     LaunchedEffect(nativeReaderReady) {
         if (nativeReaderReady) readerShown = true
@@ -258,25 +385,72 @@ fun ArticleScreen(
             barVisible = false
         }
     }
-    BackHandler(enabled = showSpeedReader) {
+    LaunchedEffect(pendingReadAloud, readAloudSegments) {
+        if (pendingReadAloud && readAloudSegments.isNotEmpty()) {
+            pendingReadAloud = false
+            readAloudAutoPlayKey += 1
+            showReadAloud = true
+            barVisible = true
+        }
+    }
+    LaunchedEffect(activeStoryId) {
+        if (showReadAloud) {
+            readAloudAutoPlayKey += 1
+            currentReadAloudBlockIndex = null
+        }
+    }
+    LaunchedEffect(forceWebArticle) {
+        if (forceWebArticle) {
+            pendingSpeedReader = false
+            showSpeedReader = false
+            pendingReadAloud = false
+            showReadAloud = false
+            currentReadAloudBlockIndex = null
+        }
+    }
+    BackHandler(enabled = showChrome && showSpeedReader) {
         showSpeedReader = false
         barVisible = true
     }
-    BackHandler(enabled = openedLinkUrl != null) {
+    BackHandler(enabled = showChrome && showReadAloud) {
+        showReadAloud = false
+        currentReadAloudBlockIndex = null
+        barVisible = true
+        if (showBack) onBack()
+    }
+    BackHandler(enabled = showChrome && openedLinkUrl != null) {
         openedLinkUrl = null
         lastScrollY[0] = nativeReaderListState.readerScrollKey()
         barVisible = true
     }
-    // Load the thread in the background so opening comments is instant when summoned.
-    LaunchedEffect(storyId) { viewModel.loadComments() }
-
     val linkedUrl = openedLinkUrl
     Box(modifier.fillMaxSize()) {
-            when {
+        val articleContent: @Composable () -> Unit = {
+            Box(Modifier.fillMaxSize().background(Color(pageBackground))) {
+                when {
                 storyState is UiState.Loading -> LoadingIndicator(Modifier.align(Alignment.Center))
                 story == null -> ErrorState(stringResource(R.string.couldnt_load), viewModel::loadStory)
-                story.url == null -> TextPost(story)
-                linkedUrl != null -> ArticleWebView(
+                story.url == null -> TextPost(
+                    story = story,
+                    palette = palette,
+                    readerFont = readerFont,
+                    listState = nativeReaderListState,
+                    topPad = readerTopPad.dp,
+                    onScroll = { scrollY ->
+                        val dy = scrollY - lastScrollY[0]
+                        lastScrollY[0] = scrollY
+                        if (dy > 12) barVisible = false
+                        else if (dy < -12) barVisible = true
+                        onArticleScroll(scrollY)
+                    },
+                )
+                pdfArticleUrl != null -> PdfArticle(
+                    url = pdfArticleUrl,
+                    title = story.title,
+                    topPad = readerTopPad.dp,
+                    onOpenExternally = { openExternally(context, story.url) },
+                )
+                linkedUrl != null -> if (allowWebView) ArticleWebView(
                     url = linkedUrl,
                     readerMode = false,
                     readerHtml = null,
@@ -290,10 +464,11 @@ fun ArticleScreen(
                         lastScrollY[0] = scrollY
                         if (dy > 12) barVisible = false
                         else if (dy < -12) barVisible = true
+                        onArticleScroll(scrollY)
                     },
                     onExtracted = {},
                     onExtractionFailed = {},
-                )
+                ) else Box(Modifier.fillMaxSize().background(Color(pageBackground)))
                 else -> {
                     if (readyNativeReaderArticle != null) {
                         NativeReaderArticle(
@@ -302,11 +477,13 @@ fun ArticleScreen(
                             readerFont = readerFont,
                             listState = nativeReaderListState,
                             topPad = readerTopPad.dp,
+                            activeReadAloudBlockIndex = externalReadAloudBlockIndex ?: currentReadAloudBlockIndex,
                             onScroll = { scrollY ->
                                 val dy = scrollY - lastScrollY[0]
                                 lastScrollY[0] = scrollY
                                 if (dy > 12) barVisible = false
                                 else if (dy < -12) barVisible = true
+                                onArticleScroll(scrollY)
                             },
                             onOpenLink = { url ->
                                 openedLinkUrl = url
@@ -314,7 +491,7 @@ fun ArticleScreen(
                             },
                         )
                     } else {
-                        ArticleWebView(
+                        if (allowWebView) ArticleWebView(
                             url = story.url,
                             readerMode = readerMode,
                             readerHtml = if (webReaderReady) readerHtml else null,
@@ -328,17 +505,35 @@ fun ArticleScreen(
                                 lastScrollY[0] = scrollY
                                 if (dy > 12) barVisible = false      // scrolling down hides the bar
                                 else if (dy < -12) barVisible = true // scrolling up reveals it
+                                onArticleScroll(scrollY)
                             },
-                            onExtracted = { extraction -> extracted = extraction },
+                            onExtracted = { extraction ->
+                                ReaderExtractionCache.put(activeStoryId, storyUrl, extraction)
+                                extracted = extraction
+                                scope.launch {
+                                    app.readerExtractions.put(
+                                        storyId = activeStoryId,
+                                        url = storyUrl,
+                                        title = extraction.title,
+                                        contentHtml = extraction.contentHtml,
+                                        textContent = extraction.textContent,
+                                    )
+                                }
+                            },
                             onExtractionFailed = {
+                                if (!showChrome) {
+                                    return@ArticleWebView
+                                }
+                                if (extracted != null) return@ArticleWebView
                                 readerFailed = true
                                 pendingSpeedReader = false
+                                pendingReadAloud = false
                                 Toast.makeText(context, R.string.reader_unavailable, Toast.LENGTH_SHORT).show()
                             },
-                        )
+                        ) else Box(Modifier.fillMaxSize().background(Color(pageBackground)))
                         // Cover the raw page until the native reader model is ready, so reader mode
                         // still opens without a flash of web chrome.
-                        if (readerMode && !readerShown) {
+                        if (allowWebView && readerMode && !readerShown) {
                             Box(
                                 Modifier.fillMaxSize().background(Color(pageBackground)),
                                 contentAlignment = Alignment.Center,
@@ -347,10 +542,74 @@ fun ArticleScreen(
                     }
                 }
             }
+            }
+        }
+
+        if (
+            showChrome &&
+            enableStoryPager &&
+            linkedUrl == null &&
+            !showSpeedReader &&
+            !showComments &&
+            storyIds.isNotEmpty() &&
+            activeStoryIndex >= 0 &&
+            (effectivePreviousStoryId != null || effectiveNextStoryId != null)
+        ) {
+            val pagerState = rememberPagerState(initialPage = activeStoryIndex) { storyIds.size }
+
+            LaunchedEffect(storyId, activeStoryIndex) {
+                if (activeStoryIndex >= 0 && pagerState.currentPage != activeStoryIndex) {
+                    pagerState.scrollToPage(activeStoryIndex)
+                }
+            }
+            LaunchedEffect(pagerState, storyIds, activeStoryId) {
+                snapshotFlow { pagerState.settledPage }.collect { page ->
+                    val adjacentStoryId = storyIds.getOrNull(page)
+                    if (adjacentStoryId != null && adjacentStoryId != activeStoryId) {
+                        activeStoryId = adjacentStoryId
+                        app.settings.markViewed(adjacentStoryId)
+                        onOpenAdjacentStory(adjacentStoryId)
+                    }
+                }
+            }
+
+            HorizontalPager(
+                state = pagerState,
+                key = { storyIds[it] },
+                beyondViewportPageCount = 2,
+                modifier = Modifier.fillMaxSize().background(Color(pageBackground)),
+            ) { page ->
+                val articleStoryId = storyIds[page]
+                ArticleScreen(
+                    storyId = articleStoryId,
+                    showBack = false,
+                    onBack = {},
+                    modifier = Modifier.fillMaxSize(),
+                    rendererOverride = if (articleStoryId == activeStoryId) selectedRendererOverride else null,
+                    storyIds = storyIds,
+                    showChrome = false,
+                    enableStoryPager = false,
+                    allowWebView = articleStoryId == activeStoryId,
+                    externalReadAloudBlockIndex = if (articleStoryId == activeStoryId) {
+                        currentReadAloudBlockIndex
+                    } else {
+                        null
+                    },
+                    onArticleScroll = { scrollY ->
+                        val dy = scrollY - lastScrollY[0]
+                        lastScrollY[0] = scrollY
+                        if (dy > 12) barVisible = false
+                        else if (dy < -12) barVisible = true
+                    },
+                )
+            }
+        } else {
+            articleContent()
+        }
 
             // Overlay app bar (not the scaffold top slot): reveals on scroll-up, hides on
             // scroll-down, and never relayouts the WebView underneath.
-            AnimatedVisibility(
+            if (showChrome) AnimatedVisibility(
                 visible = effectiveBarVisible,
                 modifier = Modifier.align(Alignment.TopCenter),
                 enter = slideInVertically { -it },
@@ -375,10 +634,9 @@ fun ArticleScreen(
                     },
                     actions = {
                         if (openedLinkUrl == null) {
-                            IconButton(onClick = { showAppearance = true }) {
-                                Icon(Icons.Filled.FormatSize, stringResource(R.string.appearance))
-                            }
-                            if ((story?.descendants ?: 0) > 0) {
+                            val commentCount = story?.descendants ?: 0
+                            val hasComments = commentCount > 0 || story?.kids?.isNotEmpty() == true
+                            if (hasComments) {
                                 IconButton(onClick = { showComments = true }) {
                                     Icon(
                                         Icons.AutoMirrored.Filled.Comment,
@@ -394,84 +652,154 @@ fun ArticleScreen(
                                     DropdownMenu(
                                         expanded = showReaderMenu,
                                         onDismissRequest = { showReaderMenu = false },
+                                        shape = RoundedCornerShape(28.dp),
                                     ) {
-                                        if (selectedRendererOverride == null) {
+                                        if (!isPdfArticle && !forceWebArticle) {
                                             DropdownMenuItem(
-                                                text = {
-                                                    Text(
-                                                        stringResource(
-                                                            if (readerMode) R.string.web_view else R.string.reader_view,
-                                                        ),
-                                                    )
-                                                },
-                                                leadingIcon = {
-                                                    if (readerMode) {
-                                                        Icon(Icons.Filled.Public, null)
-                                                    } else {
-                                                        Icon(Icons.AutoMirrored.Filled.Article, null)
-                                                    }
-                                                },
+                                                text = { Text(stringResource(R.string.appearance)) },
+                                                trailingIcon = { Icon(Icons.Filled.FormatSize, null) },
                                                 onClick = {
                                                     showReaderMenu = false
-                                                    val next = !readerModePref
-                                                    readerFailed = false
-                                                    readerShown = false
-                                                    scope.launch { app.settings.setReaderModeEnabled(next) }
+                                                    showAppearance = true
                                                 },
                                             )
-                                        } else {
+                                            if (selectedRendererOverride == null) {
+                                                DropdownMenuItem(
+                                                    text = {
+                                                        Text(
+                                                            stringResource(
+                                                                if (readerMode) {
+                                                                    R.string.web_view
+                                                                } else {
+                                                                    R.string.reader_view
+                                                                },
+                                                            ),
+                                                        )
+                                                    },
+                                                    trailingIcon = {
+                                                        if (readerMode) {
+                                                            Icon(Icons.Filled.Public, null)
+                                                        } else {
+                                                            Icon(Icons.AutoMirrored.Filled.Article, null)
+                                                        }
+                                                    },
+                                                    onClick = {
+                                                        showReaderMenu = false
+                                                        selectedRendererOverride = if (readerMode) {
+                                                            ArticleRendererOverride.WEB_PAGE
+                                                        } else {
+                                                            ArticleRendererOverride.NATIVE_READER
+                                                        }
+                                                        readerFailed = false
+                                                        readerShown = false
+                                                    },
+                                                )
+                                            } else {
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.use_default_reader)) },
+                                                    trailingIcon = { Icon(Icons.AutoMirrored.Filled.Article, null) },
+                                                    onClick = {
+                                                        showReaderMenu = false
+                                                        selectedRendererOverride = null
+                                                        readerFailed = false
+                                                        readerShown = false
+                                                    },
+                                                )
+                                            }
                                             DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.use_default_reader)) },
-                                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Article, null) },
+                                                text = { Text(stringResource(R.string.speed_reader)) },
                                                 onClick = {
                                                     showReaderMenu = false
-                                                    selectedRendererOverride = null
+                                                    if (speedReadWords.isNotEmpty()) {
+                                                        showSpeedReader = true
+                                                        barVisible = false
+                                                    } else {
+                                                        pendingSpeedReader = true
+                                                        selectedRendererOverride = ArticleRendererOverride.NATIVE_READER
+                                                        readerFailed = false
+                                                        readerShown = false
+                                                    }
+                                                },
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.read_aloud)) },
+                                                onClick = {
+                                                    showReaderMenu = false
+                                                    if (readAloudSegments.isNotEmpty()) {
+                                                        readAloudAutoPlayKey += 1
+                                                        showReadAloud = true
+                                                        barVisible = true
+                                                    } else {
+                                                        pendingReadAloud = true
+                                                        selectedRendererOverride = ArticleRendererOverride.NATIVE_READER
+                                                        readerFailed = false
+                                                        readerShown = false
+                                                    }
+                                                },
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.compare_web_reader)) },
+                                                trailingIcon = { Icon(Icons.Filled.Public, null) },
+                                                onClick = {
+                                                    showReaderMenu = false
+                                                    selectedRendererOverride = ArticleRendererOverride.WEB_READER
+                                                    readerFailed = false
+                                                    readerShown = false
+                                                },
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.compare_native_reader)) },
+                                                trailingIcon = { Icon(Icons.AutoMirrored.Filled.Article, null) },
+                                                onClick = {
+                                                    showReaderMenu = false
+                                                    selectedRendererOverride = ArticleRendererOverride.NATIVE_READER
                                                     readerFailed = false
                                                     readerShown = false
                                                 },
                                             )
                                         }
                                         DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.speed_reader)) },
+                                            text = { Text(stringResource(R.string.share)) },
+                                            trailingIcon = { Icon(Icons.Filled.Share, null) },
                                             onClick = {
                                                 showReaderMenu = false
-                                                if (speedReadWords.isNotEmpty()) {
-                                                    showSpeedReader = true
-                                                    barVisible = false
+                                                shareArticle(context, story.title, story.url)
+                                            },
+                                        )
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    stringResource(
+                                                        if (isPdfArticle) {
+                                                            R.string.open_in_pdf_reader
+                                                        } else {
+                                                            R.string.open_in_browser
+                                                        },
+                                                    ),
+                                                )
+                                            },
+                                            trailingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null) },
+                                            onClick = {
+                                                showReaderMenu = false
+                                                if (pdfArticleUrl != null) {
+                                                    scope.launch {
+                                                        val file = withContext(Dispatchers.IO) {
+                                                            runCatching {
+                                                                app.okHttpClient.downloadPdf(
+                                                                    pdfArticleUrl,
+                                                                    File(app.cacheDir, "pdf"),
+                                                                )
+                                                            }.getOrNull()
+                                                        }
+                                                        if (file != null) {
+                                                            openPdfExternally(context, file)
+                                                        } else {
+                                                            openExternally(context, story.url)
+                                                        }
+                                                    }
                                                 } else {
-                                                    pendingSpeedReader = true
-                                                    selectedRendererOverride = ArticleRendererOverride.NATIVE_READER
-                                                    readerFailed = false
-                                                    readerShown = false
+                                                    openExternally(context, story.url)
                                                 }
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.compare_web_reader)) },
-                                            leadingIcon = { Icon(Icons.Filled.Public, null) },
-                                            onClick = {
-                                                showReaderMenu = false
-                                                selectedRendererOverride = ArticleRendererOverride.WEB_READER
-                                                readerFailed = false
-                                                readerShown = false
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.compare_native_reader)) },
-                                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Article, null) },
-                                            onClick = {
-                                                showReaderMenu = false
-                                                selectedRendererOverride = ArticleRendererOverride.NATIVE_READER
-                                                readerFailed = false
-                                                readerShown = false
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.open_in_browser)) },
-                                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null) },
-                                            onClick = {
-                                                showReaderMenu = false
-                                                openExternally(context, story.url)
                                             },
                                         )
                                     }
@@ -483,7 +811,49 @@ fun ArticleScreen(
                 )
             }
 
-            if (showSpeedReader) {
+            if (showChrome && showReadAloud) {
+                ReadAloudControls(
+                    title = readerArticle?.title ?: story?.title,
+                    source = readerArticle?.source ?: hostOf(story?.url),
+                    imageUrl = readerArticle?.firstImageUrlOrNull(),
+                    segments = readAloudSegments,
+                    autoPlayKey = readAloudAutoPlayKey,
+                    canSkipToPreviousArticle = effectivePreviousStoryId != null,
+                    canSkipToNextArticle = effectiveNextStoryId != null,
+                    speechRate = readAloudSpeechRate,
+                    selectedVoiceName = readAloudVoiceName,
+                    onSpeechRateChange = { rate ->
+                        scope.launch { app.settings.setReadAloudSpeechRate(rate) }
+                    },
+                    onVoiceNameChange = { voiceName ->
+                        scope.launch { app.settings.setReadAloudVoiceName(voiceName) }
+                    },
+                    onCurrentBlockChange = { currentReadAloudBlockIndex = it },
+                    onSkipToPreviousArticle = {
+                        effectivePreviousStoryId?.let { adjacentStoryId ->
+                            activeStoryId = adjacentStoryId
+                            scope.launch { app.settings.markViewed(adjacentStoryId) }
+                            onOpenAdjacentStory(adjacentStoryId)
+                        }
+                    },
+                    onSkipToNextArticle = {
+                        effectiveNextStoryId?.let { adjacentStoryId ->
+                            activeStoryId = adjacentStoryId
+                            scope.launch { app.settings.markViewed(adjacentStoryId) }
+                            onOpenAdjacentStory(adjacentStoryId)
+                        }
+                    },
+                    onDismiss = {
+                        showReadAloud = false
+                        currentReadAloudBlockIndex = null
+                        barVisible = true
+                    },
+                    backgroundColor = Color(pageBackground),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+                )
+            }
+
+            if (showChrome && showSpeedReader) {
                 SpeedReaderOverlay(
                     words = speedReadWords,
                     palette = palette,
@@ -497,7 +867,7 @@ fun ArticleScreen(
 
             // Summoned from the top bar: a modal sheet over the article, dismissed to return
             // straight to distraction-free reading. The reader itself carries no comments chrome.
-            if (showComments) {
+            if (showChrome && showComments) {
                 CommentsModalSheet(
                     commentCount = story?.descendants ?: 0,
                     state = commentsState,
@@ -506,7 +876,7 @@ fun ArticleScreen(
             }
     }
 
-    if (showAppearance) {
+    if (showChrome && showAppearance) {
         AppearanceSheet(
             current = readerTheme,
             currentFont = readerFont,
@@ -568,6 +938,77 @@ private fun CommentsModalSheet(
 }
 
 @Composable
+fun ReaderExtractionPreloader(
+    stories: List<Story>,
+    modifier: Modifier = Modifier,
+    limit: Int = 10,
+) {
+    val context = LocalContext.current
+    val app = context.applicationContext as KioskApp
+    val scope = rememberCoroutineScope()
+    val candidates = remember(stories, limit) {
+        stories.take(limit).filter { story ->
+            val url = story.url ?: return@filter false
+            !url.requiresWebView() && url.renderablePdfUrlOrNull() == null
+        }
+    }
+    val candidateKey = remember(candidates) {
+        candidates.joinToString(separator = "|") { "${it.id}:${it.url}" }
+    }
+    var queue by remember { mutableStateOf<List<Story>>(emptyList()) }
+    var current by remember { mutableStateOf<Story?>(null) }
+    var pageReady by remember(current?.id) { mutableStateOf(false) }
+
+    LaunchedEffect(candidateKey) {
+        queue = candidates.filter { story ->
+            val url = story.url ?: return@filter false
+            ReaderExtractionCache.get(story.id, url) == null &&
+                app.readerExtractions.get(story.id)?.url != url
+        }
+        current = null
+    }
+
+    LaunchedEffect(queue, current) {
+        if (current == null && queue.isNotEmpty()) {
+            current = queue.first()
+            queue = queue.drop(1)
+        }
+    }
+
+    val story = current ?: return
+    val url = story.url ?: return
+    Box(modifier.size(1.dp).alpha(0f)) {
+        ArticleWebView(
+            url = url,
+            readerMode = true,
+            readerHtml = null,
+            pageReady = pageReady,
+            pageBackground = android.graphics.Color.TRANSPARENT,
+            contentTopPad = 0.dp,
+            onPageReady = { pageReady = true },
+            onReaderShownChange = {},
+            onScroll = {},
+            onExtracted = { extraction ->
+                ReaderExtractionCache.put(story.id, url, extraction)
+                current = null
+                scope.launch {
+                    app.readerExtractions.put(
+                        storyId = story.id,
+                        url = url,
+                        title = extraction.title,
+                        contentHtml = extraction.contentHtml,
+                        textContent = extraction.textContent,
+                    )
+                }
+            },
+            onExtractionFailed = {
+                current = null
+            },
+        )
+    }
+}
+
+@Composable
 private fun ArticleWebView(
     url: String,
     readerMode: Boolean,
@@ -583,24 +1024,32 @@ private fun ArticleWebView(
 ) {
     val readabilityJs = rememberReadabilityScript()
     val holder = remember { WebViewHolder() }
+    val latestOnScroll by androidx.compose.runtime.rememberUpdatedState(onScroll)
 
     androidx.compose.ui.viewinterop.AndroidView(
         // Web mode: offset the whole WebView below the pinned bar (a WebView ignores its own top
         // padding for content layout). Reader mode uses CSS padding instead, so this is 0.
-        modifier = Modifier.fillMaxSize().padding(top = contentTopPad),
+        modifier = Modifier.fillMaxSize().background(Color(pageBackground)).padding(top = contentTopPad),
         factory = { ctx ->
             WebView(ctx).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT,
                 )
+                isSoundEffectsEnabled = false
+                isHapticFeedbackEnabled = false
                 setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                    onScroll(scrollY)
+                    latestOnScroll(scrollY)
                 }
                 // Match the reader background so there's no white flash while (re)loading.
                 setBackgroundColor(pageBackground)
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
+                settings.mediaPlaybackRequiresUserGesture = false
+                settings.loadWithOverviewMode = true
+                settings.useWideViewPort = true
+                settings.setSupportZoom(false)
+                webChromeClient = WebChromeClient()
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView, finishedUrl: String?) {
                         if (holder.showingReader) {
@@ -615,8 +1064,9 @@ private fun ArticleWebView(
                             )
                         } else {
                             // The raw page finished: make Readability available and extract.
-                            view.evaluateJavascript(readabilityJs, null)
-                            onPageReady()
+                            view.evaluateJavascript(readabilityJs) {
+                                onPageReady()
+                            }
                             onReaderShownChange(false)
                         }
                     }
@@ -656,6 +1106,18 @@ private fun ArticleWebView(
             }
         }
     }
+
+    DisposableEffect(holder) {
+        onDispose {
+            holder.webView?.apply {
+                stopLoading()
+                loadUrl("about:blank")
+                removeAllViews()
+                destroy()
+            }
+            holder.webView = null
+        }
+    }
 }
 
 private class WebViewHolder {
@@ -669,6 +1131,38 @@ private data class ReaderExtraction(
     val contentHtml: String,
     val textContent: String,
 )
+
+private object ReaderExtractionCache {
+    private const val MaxEntries = 20
+    private val entries = object : LinkedHashMap<Long, CachedReaderExtraction>(MaxEntries, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, CachedReaderExtraction>?): Boolean =
+            size > MaxEntries
+    }
+    var generation by mutableLongStateOf(0L)
+        private set
+
+    @Synchronized
+    fun get(storyId: Long, url: String): ReaderExtraction? =
+        entries[storyId]?.takeIf { it.url == url }?.extraction
+
+    @Synchronized
+    fun put(storyId: Long, url: String, extraction: ReaderExtraction) {
+        entries[storyId] = CachedReaderExtraction(url = url, extraction = extraction)
+        generation++
+    }
+}
+
+private data class CachedReaderExtraction(
+    val url: String,
+    val extraction: ReaderExtraction,
+)
+
+private fun ReaderExtractionEntity.toReaderExtraction(): ReaderExtraction =
+    ReaderExtraction(
+        title = title,
+        contentHtml = contentHtml,
+        textContent = textContent,
+    )
 
 @Composable
 private fun rememberReadabilityScript(): String {
@@ -791,6 +1285,7 @@ private fun NativeReaderArticle(
     readerFont: ReaderFont,
     listState: LazyListState,
     topPad: androidx.compose.ui.unit.Dp,
+    activeReadAloudBlockIndex: Int?,
     onScroll: (Int) -> Unit,
     onOpenLink: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -802,10 +1297,16 @@ private fun NativeReaderArticle(
     val rule = remember(palette) { Color(android.graphics.Color.parseColor(palette.rule)) }
     val codeBg = remember(palette) { Color(android.graphics.Color.parseColor(palette.codeBg)) }
     val readerFontFamily = readerFont.fontFamily
+    val latestOnScroll by androidx.compose.runtime.rememberUpdatedState(onScroll)
 
     LaunchedEffect(listState) {
         snapshotFlow { listState.readerScrollKey() }
-            .collect(onScroll)
+            .collect { latestOnScroll(it) }
+    }
+    LaunchedEffect(activeReadAloudBlockIndex) {
+        activeReadAloudBlockIndex?.let { blockIndex ->
+            listState.animateScrollToItem(index = blockIndex + 1, scrollOffset = 48)
+        }
     }
 
     SelectionContainer {
@@ -842,8 +1343,18 @@ private fun NativeReaderArticle(
                     }
                 }
             }
-            itemsIndexed(article.blocks, key = { index, _ -> "block-$index" }) { _, block ->
-                ReaderMeasure {
+            itemsIndexed(article.blocks, key = { index, _ -> "block-$index" }) { index, block ->
+                val active = activeReadAloudBlockIndex == index
+                ReaderMeasure(
+                    modifier = if (active) {
+                        Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(codeBg)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    } else {
+                        Modifier
+                    },
+                ) {
                     ReaderBlockView(
                         block = block,
                         foreground = foreground,
@@ -863,6 +1374,945 @@ private fun NativeReaderArticle(
 private fun LazyListState.readerScrollKey(): Int =
     firstVisibleItemIndex * 100_000 + firstVisibleItemScrollOffset
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun ReadAloudControls(
+    title: String?,
+    source: String?,
+    imageUrl: String?,
+    segments: List<ReadAloudSegment>,
+    autoPlayKey: Long,
+    canSkipToPreviousArticle: Boolean,
+    canSkipToNextArticle: Boolean,
+    speechRate: Float,
+    selectedVoiceName: String?,
+    onSpeechRateChange: (Float) -> Unit,
+    onVoiceNameChange: (String?) -> Unit,
+    onCurrentBlockChange: (Int?) -> Unit,
+    onSkipToPreviousArticle: () -> Unit,
+    onSkipToNextArticle: () -> Unit,
+    onDismiss: () -> Unit,
+    backgroundColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val appContext = context.applicationContext
+    val app = appContext as? KioskApp
+    val activity = LocalActivity.current
+    val window = activity?.window
+    val shouldRead = remember { AtomicBoolean(false) }
+    val hasAudioFocus = remember { AtomicBoolean(false) }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val audioManager = remember(appContext) { appContext.getSystemService(AudioManager::class.java) }
+    val readAloudAudioAttributes = remember {
+        AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+    }
+    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    var ready by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var isPlaying by rememberSaveable(segments) { mutableStateOf(false) }
+    var currentIndex by rememberSaveable(segments) { mutableIntStateOf(0) }
+    var showPlayerSheet by rememberSaveable { mutableStateOf(false) }
+    var draftSpeechRate by rememberSaveable(speechRate) { mutableFloatStateOf(speechRate) }
+    var segmentStartElapsedMillis by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    var availableVoices by remember { mutableStateOf<List<Voice>>(emptyList()) }
+    var voiceMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    var mediaSession by remember { mutableStateOf<MediaSession?>(null) }
+    var mediaArtwork by remember(imageUrl) { mutableStateOf<Bitmap?>(null) }
+    val latestSpeechRate by androidx.compose.runtime.rememberUpdatedState(speechRate)
+    val latestSelectedVoiceName by androidx.compose.runtime.rememberUpdatedState(selectedVoiceName)
+    val latestAvailableVoices by androidx.compose.runtime.rememberUpdatedState(availableVoices)
+    val audioFocusRequest = remember(audioManager) {
+        AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(readAloudAudioAttributes)
+            .setAcceptsDelayedFocusGain(false)
+            .setWillPauseWhenDucked(true)
+            .setOnAudioFocusChangeListener { focusChange ->
+                if (
+                    focusChange == AudioManager.AUDIOFOCUS_LOSS ||
+                    focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT
+                ) {
+                    mainHandler.post {
+                        shouldRead.set(false)
+                        tts?.stop()
+                        isPlaying = false
+                        onCurrentBlockChange(null)
+                        hasAudioFocus.set(false)
+                    }
+                }
+            }
+            .build()
+    }
+
+    fun requestReadAloudAudioFocus(): Boolean {
+        if (hasAudioFocus.get()) return true
+        val granted = audioManager.requestAudioFocus(audioFocusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        hasAudioFocus.set(granted)
+        return granted
+    }
+
+    fun releaseReadAloudAudioFocus() {
+        if (hasAudioFocus.getAndSet(false)) {
+            audioManager.abandonAudioFocusRequest(audioFocusRequest)
+        }
+    }
+
+    DisposableEffect(window) {
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+    }
+
+    DisposableEffect(appContext, segments) {
+        ready = false
+        error = null
+        isPlaying = false
+        lateinit var engine: TextToSpeech
+        engine = TextToSpeech(appContext) { status ->
+            mainHandler.post {
+                if (status == TextToSpeech.SUCCESS) {
+                    val languageStatus = engine.setLanguage(Locale.getDefault())
+                    if (
+                        languageStatus == TextToSpeech.LANG_MISSING_DATA ||
+                        languageStatus == TextToSpeech.LANG_NOT_SUPPORTED
+                    ) {
+                        error = appContext.getString(R.string.read_aloud_language_unavailable)
+                    } else {
+                        engine.setAudioAttributes(readAloudAudioAttributes)
+                        val voices = engine.readAloudVoices()
+                        availableVoices = voices
+                        latestSelectedVoiceName?.let { voiceName ->
+                            voices.firstOrNull { it.name == voiceName }?.let(engine::setVoice)
+                        }
+                        engine.setSpeechRate(latestSpeechRate)
+                        ready = true
+                    }
+                } else {
+                    error = appContext.getString(R.string.read_aloud_unavailable)
+                }
+            }
+        }
+        engine.setOnUtteranceProgressListener(
+            object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    val index = utteranceId?.readAloudIndexOrNull() ?: return
+                    mainHandler.post {
+                        currentIndex = index
+                        segmentStartElapsedMillis = SystemClock.elapsedRealtime()
+                        onCurrentBlockChange(segments.getOrNull(index)?.blockIndex)
+                        isPlaying = true
+                    }
+                }
+
+                override fun onDone(utteranceId: String?) {
+                    val nextIndex = (utteranceId?.readAloudIndexOrNull() ?: return) + 1
+                    mainHandler.post {
+                        if (shouldRead.get() && nextIndex < segments.size) {
+                            currentIndex = nextIndex
+                            onCurrentBlockChange(segments[nextIndex].blockIndex)
+                            engine.speakReadAloudSegment(
+                                text = segments[nextIndex].text,
+                                index = nextIndex,
+                                speechRate = latestSpeechRate,
+                                voice = latestSelectedVoiceName?.let { voiceName ->
+                                    latestAvailableVoices.firstOrNull { it.name == voiceName }
+                                },
+                            )
+                        } else {
+                            shouldRead.set(false)
+                            isPlaying = false
+                            onCurrentBlockChange(null)
+                            releaseReadAloudAudioFocus()
+                        }
+                    }
+                }
+
+                @Deprecated("Required by framework callback; onError(String, Int) handles modern engines.")
+                override fun onError(utteranceId: String?) {
+                    mainHandler.post {
+                        shouldRead.set(false)
+                        isPlaying = false
+                        onCurrentBlockChange(null)
+                        releaseReadAloudAudioFocus()
+                        error = appContext.getString(R.string.read_aloud_unavailable)
+                    }
+                }
+
+                override fun onError(utteranceId: String?, errorCode: Int) {
+                    mainHandler.post {
+                        shouldRead.set(false)
+                        isPlaying = false
+                        onCurrentBlockChange(null)
+                        releaseReadAloudAudioFocus()
+                        error = appContext.getString(R.string.read_aloud_unavailable)
+                    }
+                }
+
+                override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                    if (interrupted) {
+                        mainHandler.post {
+                            isPlaying = false
+                            releaseReadAloudAudioFocus()
+                        }
+                    }
+                }
+            },
+        )
+        tts = engine
+
+        onDispose {
+            shouldRead.set(false)
+            engine.stop()
+            engine.shutdown()
+            releaseReadAloudAudioFocus()
+            onCurrentBlockChange(null)
+            tts = null
+        }
+    }
+
+    LaunchedEffect(autoPlayKey, ready, segments) {
+        val engine = tts
+        if (autoPlayKey > 0L && ready && segments.isNotEmpty() && engine != null) {
+            engine.stop()
+            if (requestReadAloudAudioFocus()) {
+                shouldRead.set(true)
+                currentIndex = 0
+                segmentStartElapsedMillis = SystemClock.elapsedRealtime()
+                onCurrentBlockChange(segments[0].blockIndex)
+                engine.speakReadAloudSegment(
+                    text = segments[0].text,
+                    index = 0,
+                    speechRate = speechRate,
+                    voice = selectedVoiceName?.let { voiceName -> availableVoices.firstOrNull { it.name == voiceName } },
+                )
+            } else {
+                shouldRead.set(false)
+                isPlaying = false
+                error = appContext.getString(R.string.read_aloud_unavailable)
+            }
+        }
+    }
+
+    LaunchedEffect(ready, speechRate, selectedVoiceName, availableVoices) {
+        val engine = tts ?: return@LaunchedEffect
+        if (!ready) return@LaunchedEffect
+        if (selectedVoiceName == null) {
+            engine.setLanguage(Locale.getDefault())
+        } else {
+            availableVoices.firstOrNull { it.name == selectedVoiceName }?.let(engine::setVoice)
+        }
+        engine.setSpeechRate(speechRate)
+    }
+
+    val selectedVoice = selectedVoiceName?.let { voiceName ->
+        availableVoices.firstOrNull { it.name == voiceName }
+    }
+    val selectedVoiceLabel = selectedVoice?.readAloudLabel() ?: stringResource(R.string.system_voice)
+    val displayTitle = title?.takeIf { it.isNotBlank() } ?: stringResource(R.string.read_aloud)
+    val displaySource = source?.takeIf { it.isNotBlank() } ?: when {
+        error != null -> error.orEmpty()
+        segments.isEmpty() -> stringResource(R.string.read_aloud_empty)
+        !ready -> stringResource(R.string.read_aloud_starting)
+        else -> stringResource(
+            R.string.read_aloud_progress,
+            (currentIndex + 1).coerceAtMost(segments.size),
+            segments.size,
+        )
+    }
+    fun speakSegment(engine: TextToSpeech, index: Int) {
+        if (segments.isEmpty()) return
+        if (!requestReadAloudAudioFocus()) {
+            shouldRead.set(false)
+            isPlaying = false
+            error = appContext.getString(R.string.read_aloud_unavailable)
+            return
+        }
+        val safeIndex = index.coerceIn(0, segments.lastIndex)
+        currentIndex = safeIndex
+        segmentStartElapsedMillis = SystemClock.elapsedRealtime()
+        shouldRead.set(true)
+        onCurrentBlockChange(segments[safeIndex].blockIndex)
+        engine.speakReadAloudSegment(
+            text = segments[safeIndex].text,
+            index = safeIndex,
+            speechRate = draftSpeechRate,
+            voice = selectedVoice,
+        )
+    }
+    fun speakCurrentSegment(engine: TextToSpeech) {
+        speakSegment(engine, currentIndex)
+    }
+    fun moveToSegment(index: Int) {
+        if (segments.isEmpty()) return
+        val safeIndex = index.coerceIn(0, segments.lastIndex)
+        currentIndex = safeIndex
+        onCurrentBlockChange(segments[safeIndex].blockIndex)
+        val engine = tts
+        if (engine != null && isPlaying) {
+            speakSegment(engine, safeIndex)
+        }
+    }
+    fun togglePlayback() {
+        val engine = tts ?: return
+        if (isPlaying) {
+            shouldRead.set(false)
+            engine.stop()
+            isPlaying = false
+            releaseReadAloudAudioFocus()
+        } else {
+            speakCurrentSegment(engine)
+        }
+    }
+    fun playPlayback() {
+        if (!isPlaying) {
+            tts?.let(::speakCurrentSegment)
+        }
+    }
+    fun pausePlayback() {
+        if (isPlaying) {
+            shouldRead.set(false)
+            tts?.stop()
+            isPlaying = false
+            releaseReadAloudAudioFocus()
+        }
+    }
+    val latestPlayPlayback by androidx.compose.runtime.rememberUpdatedState(::playPlayback)
+    val latestPausePlayback by androidx.compose.runtime.rememberUpdatedState(::pausePlayback)
+    val latestSkipToPreviousArticle by androidx.compose.runtime.rememberUpdatedState(onSkipToPreviousArticle)
+    val latestSkipToNextArticle by androidx.compose.runtime.rememberUpdatedState(onSkipToNextArticle)
+    val latestSeekToParagraph by androidx.compose.runtime.rememberUpdatedState { position: Long ->
+        moveToSegment(segments.segmentIndexForPosition(position))
+    }
+    val latestDismiss by androidx.compose.runtime.rememberUpdatedState {
+        shouldRead.set(false)
+        tts?.stop()
+        releaseReadAloudAudioFocus()
+        onDismiss()
+    }
+
+    LaunchedEffect(app, imageUrl) {
+        mediaArtwork = null
+        val client = app?.okHttpClient ?: return@LaunchedEffect
+        val url = imageUrl ?: return@LaunchedEffect
+        mediaArtwork = withContext(Dispatchers.IO) {
+            runCatching {
+                client.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                    if (!response.isSuccessful) return@use null
+                    response.body.byteStream().use { stream ->
+                        BitmapFactory.decodeStream(stream)?.scaledForMediaMetadata()
+                    }
+                }
+            }.getOrNull()
+        }
+    }
+
+    DisposableEffect(appContext) {
+        val launchIntent = Intent(appContext, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val contentIntent = PendingIntent.getActivity(
+            appContext,
+            0,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val session = MediaSession(appContext, "KioskReadAloud").apply {
+            setSessionActivity(contentIntent)
+            setCallback(
+                object : MediaSession.Callback() {
+                    override fun onPlay() {
+                        latestPlayPlayback()
+                    }
+
+                    override fun onPause() {
+                        latestPausePlayback()
+                    }
+
+                    override fun onStop() {
+                        latestDismiss()
+                    }
+
+                    override fun onSkipToPrevious() {
+                        latestSkipToPreviousArticle()
+                    }
+
+                    override fun onSkipToNext() {
+                        latestSkipToNextArticle()
+                    }
+
+                    override fun onSeekTo(pos: Long) {
+                        latestSeekToParagraph(pos)
+                    }
+                },
+            )
+            isActive = true
+        }
+        mediaSession = session
+        onDispose {
+            session.isActive = false
+            session.release()
+            mediaSession = null
+            appContext.readAloudNotificationManager().cancel(ReadAloudNotificationId)
+        }
+    }
+
+    LaunchedEffect(
+        appContext,
+        mediaSession,
+        displayTitle,
+        displaySource,
+        mediaArtwork,
+        isPlaying,
+        ready,
+        error,
+    ) {
+        val session = mediaSession ?: return@LaunchedEffect
+        appContext.notifyReadAloudMediaNotification(
+            appContext.buildReadAloudNotification(
+                mediaSession = session,
+                title = displayTitle,
+                source = displaySource,
+                artwork = mediaArtwork,
+                isPlaying = isPlaying,
+            ),
+        )
+    }
+
+    LaunchedEffect(mediaSession, displayTitle, displaySource, mediaArtwork, segments) {
+        mediaSession?.setMetadata(
+            MediaMetadata.Builder()
+                .putString(MediaMetadata.METADATA_KEY_TITLE, displayTitle)
+                .putString(MediaMetadata.METADATA_KEY_ARTIST, displaySource)
+                .putLong(
+                    MediaMetadata.METADATA_KEY_DURATION,
+                    segments.estimatedDurationMillis(),
+                )
+                .apply {
+                    mediaArtwork?.let { artwork ->
+                        putBitmap(MediaMetadata.METADATA_KEY_ART, artwork)
+                        putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, artwork)
+                    }
+                }
+                .build(),
+        )
+    }
+
+    LaunchedEffect(mediaSession, isPlaying, ready, error, currentIndex, segments, segmentStartElapsedMillis) {
+        val actions = (
+            PlaybackState.ACTION_PLAY or
+            PlaybackState.ACTION_PAUSE or
+            PlaybackState.ACTION_STOP or
+            PlaybackState.ACTION_SEEK_TO
+            ) or
+            (if (canSkipToPreviousArticle) PlaybackState.ACTION_SKIP_TO_PREVIOUS else 0L) or
+            (if (canSkipToNextArticle) PlaybackState.ACTION_SKIP_TO_NEXT else 0L)
+        val segmentBasePosition = segments.positionForSegment(currentIndex)
+        val elapsedInSegment = if (isPlaying) {
+            SystemClock.elapsedRealtime() - segmentStartElapsedMillis
+        } else {
+            0L
+        }
+        val progressPosition = (segmentBasePosition + elapsedInSegment).coerceIn(
+            0L,
+            segments.estimatedDurationMillis(),
+        )
+        mediaSession?.setPlaybackState(
+            PlaybackState.Builder()
+                .setActions(actions)
+                .setState(
+                    when {
+                        !ready || error != null -> PlaybackState.STATE_NONE
+                        isPlaying -> PlaybackState.STATE_PLAYING
+                        else -> PlaybackState.STATE_PAUSED
+                    },
+                    progressPosition,
+                    if (isPlaying) 1f else 0f,
+                )
+                .build(),
+        )
+    }
+
+    val miniPlayerDismissState = rememberSwipeToDismissBoxState(
+        initialValue = SwipeToDismissBoxValue.Settled,
+        positionalThreshold = { distance -> distance * 0.35f },
+    )
+    val miniPlayerProgress = if (segments.isEmpty()) {
+        0f
+    } else {
+        ((currentIndex + 1).coerceAtMost(segments.size).toFloat() / segments.size.toFloat())
+            .coerceIn(0f, 1f)
+    }
+    val animatedPlayerProgress by animateFloatAsState(
+        targetValue = miniPlayerProgress,
+        animationSpec = tween(500),
+        label = "readAloudProgress",
+    )
+    SwipeToDismissBox(
+        state = miniPlayerDismissState,
+        backgroundContent = { Box(Modifier.fillMaxSize().background(backgroundColor)) },
+        enableDismissFromStartToEnd = true,
+        enableDismissFromEndToStart = true,
+        onDismiss = {
+            latestDismiss()
+        },
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 6.dp,
+        ) {
+            Column {
+                LinearProgressIndicator(
+                    progress = { animatedPlayerProgress },
+                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { showPlayerSheet = true }
+                            .padding(end = 8.dp),
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Text(
+                            text = displayTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = displaySource,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    IconButton(
+                        enabled = segments.isNotEmpty() && currentIndex > 0,
+                        onClick = { moveToSegment(currentIndex - 1) },
+                    ) {
+                        Icon(Icons.Filled.SkipPrevious, stringResource(R.string.previous_paragraph))
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(50.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(50.dp))
+                            .clickable(enabled = ready && segments.isNotEmpty() && error == null) {
+                                togglePlayback()
+                            },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
+                                modifier = Modifier.size(30.dp),
+                            )
+                        }
+                    }
+                    IconButton(
+                        enabled = segments.isNotEmpty() && currentIndex < segments.lastIndex,
+                        onClick = { moveToSegment(currentIndex + 1) },
+                    ) {
+                        Icon(Icons.Filled.SkipNext, stringResource(R.string.next_paragraph))
+                    }
+                }
+            }
+        }
+    }
+
+    if (showPlayerSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showPlayerSheet = false },
+            sheetState = sheetState,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 24.dp, end = 24.dp, bottom = 28.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(104.dp),
+                    ) {
+                        if (imageUrl != null) {
+                            AsyncImage(
+                                model = imageUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = displayTitle.firstOrNull()?.uppercase().orEmpty(),
+                                    style = MaterialTheme.typography.displaySmall,
+                                )
+                            }
+                        }
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = displayTitle,
+                            style = MaterialTheme.typography.titleLarge,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = displaySource,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+
+                if (ready && error == null && segments.isNotEmpty()) {
+                    val playerProgressModifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 24.dp)
+                        .height(WavyProgressIndicatorDefaults.LinearContainerHeight)
+                    LinearWavyProgressIndicator(
+                        progress = { animatedPlayerProgress },
+                        amplitude = { if (isPlaying) 1f else 0f },
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        modifier = playerProgressModifier,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.read_aloud_progress,
+                            (currentIndex + 1).coerceAtMost(segments.size),
+                            segments.size,
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 14.dp),
+                    )
+                    Text(
+                        text = segments.getOrNull(currentIndex)?.text.orEmpty(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                } else {
+                    Text(
+                        text = displaySource,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 24.dp),
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(
+                        enabled = segments.isNotEmpty() && currentIndex > 0,
+                        onClick = { moveToSegment(currentIndex - 1) },
+                    ) {
+                        Icon(Icons.Filled.SkipPrevious, stringResource(R.string.previous_paragraph))
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(50.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier
+                            .padding(horizontal = 18.dp)
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(50.dp))
+                            .clickable(enabled = ready && segments.isNotEmpty() && error == null) { togglePlayback() },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
+                                modifier = Modifier.size(34.dp),
+                            )
+                        }
+                    }
+                    IconButton(
+                        enabled = segments.isNotEmpty() && currentIndex < segments.lastIndex,
+                        onClick = { moveToSegment(currentIndex + 1) },
+                    ) {
+                        Icon(Icons.Filled.SkipNext, stringResource(R.string.next_paragraph))
+                    }
+                }
+
+                Text(
+                    text = stringResource(R.string.read_aloud_speed, draftSpeechRate),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 20.dp),
+                )
+                Slider(
+                    value = draftSpeechRate,
+                    onValueChange = { value -> draftSpeechRate = value },
+                    onValueChangeFinished = {
+                        onSpeechRateChange(draftSpeechRate)
+                        val engine = tts
+                        if (engine != null) {
+                            engine.setSpeechRate(draftSpeechRate)
+                            if (isPlaying) speakCurrentSegment(engine)
+                        }
+                    },
+                    valueRange = 0.7f..1.4f,
+                    steps = 6,
+                )
+
+                Box {
+                    TextButton(
+                        enabled = ready && segments.isNotEmpty() && error == null,
+                        onClick = { voiceMenuExpanded = true },
+                    ) {
+                        Text(stringResource(R.string.read_aloud_voice, selectedVoiceLabel))
+                    }
+                    DropdownMenu(
+                        expanded = voiceMenuExpanded,
+                        onDismissRequest = { voiceMenuExpanded = false },
+                        shape = RoundedCornerShape(28.dp),
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.system_voice)) },
+                            onClick = {
+                                voiceMenuExpanded = false
+                                onVoiceNameChange(null)
+                                val engine = tts
+                                if (engine != null) {
+                                    engine.setLanguage(Locale.getDefault())
+                                    engine.setSpeechRate(draftSpeechRate)
+                                    if (isPlaying) speakCurrentSegment(engine)
+                                }
+                            },
+                        )
+                        availableVoices.take(8).forEach { voice ->
+                            DropdownMenuItem(
+                                text = { Text(voice.readAloudLabel()) },
+                                onClick = {
+                                    voiceMenuExpanded = false
+                                    onVoiceNameChange(voice.name)
+                                    val engine = tts
+                                    if (engine != null) {
+                                        engine.setVoice(voice)
+                                        engine.setSpeechRate(draftSpeechRate)
+                                        if (isPlaying) speakCurrentSegment(engine)
+                                    }
+                                },
+                            )
+                        }
+                        if (availableVoices.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.read_aloud_no_voices)) },
+                                onClick = { voiceMenuExpanded = false },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun TextToSpeech.speakReadAloudSegment(
+    text: String,
+    index: Int,
+    speechRate: Float,
+    voice: Voice?,
+) {
+    voice?.let(::setVoice)
+    setSpeechRate(speechRate)
+    speak(text, TextToSpeech.QUEUE_FLUSH, Bundle(), readAloudUtteranceId(index))
+}
+
+private fun TextToSpeech.readAloudVoices(): List<Voice> =
+    voices
+        ?.filter { voice -> !voice.isNetworkConnectionRequired && voice.locale.language == Locale.getDefault().language }
+        ?.sortedWith(compareBy<Voice> { it.locale.displayLanguage }.thenBy { it.name })
+        .orEmpty()
+
+private fun Context.buildReadAloudNotification(
+    mediaSession: MediaSession,
+    title: String,
+    source: String,
+    artwork: Bitmap?,
+    isPlaying: Boolean,
+): Notification {
+    ensureReadAloudNotificationChannel()
+    val launchIntent = Intent(this, MainActivity::class.java)
+        .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    val contentIntent = PendingIntent.getActivity(
+        this,
+        0,
+        launchIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+    return Notification.Builder(this, ReadAloudNotificationChannelId)
+        .setSmallIcon(R.drawable.ic_notification)
+        .setContentTitle(title)
+        .setContentText(source)
+        .setSubText(getString(R.string.read_aloud))
+        .setContentIntent(contentIntent)
+        .setCategory(Notification.CATEGORY_TRANSPORT)
+        .setVisibility(Notification.VISIBILITY_PUBLIC)
+        .setOnlyAlertOnce(true)
+        .setShowWhen(false)
+        .setOngoing(isPlaying)
+        .setDefaults(0)
+        .apply {
+            artwork?.let(::setLargeIcon)
+        }
+        .setStyle(
+            Notification.MediaStyle()
+                .setMediaSession(mediaSession.sessionToken),
+        )
+        .build()
+}
+
+private fun Context.ensureReadAloudNotificationChannel() {
+    val manager = readAloudNotificationManager()
+    if (manager.getNotificationChannel(ReadAloudNotificationChannelId) != null) return
+    manager.createNotificationChannel(
+        NotificationChannel(
+            ReadAloudNotificationChannelId,
+            getString(R.string.read_aloud),
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            setShowBadge(false)
+            setSound(null, null)
+        },
+    )
+}
+
+private fun Context.readAloudNotificationManager(): NotificationManager =
+    getSystemService(NotificationManager::class.java)
+
+@SuppressLint("NotificationPermission")
+private fun Context.notifyReadAloudMediaNotification(notification: Notification) {
+    // Android 13+ exempts media-session notifications from POST_NOTIFICATIONS. Lint cannot infer
+    // that this notification is MediaStyle and linked to a live MediaSession.
+    readAloudNotificationManager().notify(ReadAloudNotificationId, notification)
+}
+
+private fun Bitmap.scaledForMediaMetadata(maxSize: Int = 512): Bitmap {
+    val longestSide = width.coerceAtLeast(height)
+    if (longestSide <= maxSize) return this
+    val scale = maxSize.toFloat() / longestSide.toFloat()
+    return Bitmap.createScaledBitmap(
+        this,
+        (width * scale).toInt().coerceAtLeast(1),
+        (height * scale).toInt().coerceAtLeast(1),
+        true,
+    )
+}
+
+private const val ReadAloudNotificationChannelId = "read_aloud"
+private const val ReadAloudNotificationId = 9001
+private const val ReadAloudBaseWordsPerMinute = 180f
+private const val ReadAloudMinimumSegmentMillis = 900L
+
+private fun Voice.readAloudLabel(): String =
+    locale.getDisplayName(Locale.getDefault()).ifBlank { name }
+
+private fun readAloudUtteranceId(index: Int): String = "read-aloud-$index"
+
+private fun String.readAloudIndexOrNull(): Int? =
+    removePrefix("read-aloud-").toIntOrNull()
+
+private data class ReadAloudSegment(
+    val text: String,
+    val blockIndex: Int,
+) {
+    val estimatedDurationMillis: Long =
+        ((text.readAloudWordCount().toFloat() / ReadAloudBaseWordsPerMinute) * 60_000f)
+            .toLong()
+            .coerceAtLeast(ReadAloudMinimumSegmentMillis)
+}
+
+private fun String.readAloudWordCount(): Int =
+    trim()
+        .split(Regex("\\s+"))
+        .count { it.isNotBlank() }
+        .coerceAtLeast(1)
+
+private fun ReaderArticle.readAloudSegments(): List<ReadAloudSegment> =
+    blocks.flatMapIndexed { blockIndex, block ->
+        block.readAloudParagraphs()
+            .flatMap { paragraph -> paragraph.chunkForTextToSpeech() }
+            .map { text -> ReadAloudSegment(text = text, blockIndex = blockIndex) }
+    }
+
+private fun List<ReadAloudSegment>.estimatedDurationMillis(): Long =
+    sumOf { it.estimatedDurationMillis }.coerceAtLeast(ReadAloudMinimumSegmentMillis)
+
+private fun List<ReadAloudSegment>.positionForSegment(index: Int): Long =
+    take(index.coerceIn(0, size)).sumOf { it.estimatedDurationMillis }
+
+private fun List<ReadAloudSegment>.segmentIndexForPosition(positionMillis: Long): Int {
+    if (isEmpty()) return 0
+    var elapsed = 0L
+    forEachIndexed { index, segment ->
+        elapsed += segment.estimatedDurationMillis
+        if (positionMillis < elapsed) return index
+    }
+    return lastIndex
+}
+
+private fun ReaderArticle.firstImageUrlOrNull(): String? =
+    blocks.firstNotNullOfOrNull { block ->
+        when (block) {
+            is ReaderBlock.Image -> block.src
+            is ReaderBlock.Figure -> block.images.firstOrNull()?.src
+            else -> null
+        }
+    }
+
+private fun ReaderBlock.readAloudParagraphs(): List<String> =
+    when (this) {
+        is ReaderBlock.Heading -> listOf(text.plainText())
+        is ReaderBlock.Paragraph -> listOf(text.plainText())
+        is ReaderBlock.Quote -> blocks.flatMap { it.readAloudParagraphs() }
+        is ReaderBlock.CodeBlock -> emptyList()
+        is ReaderBlock.BulletedList -> items.map { it.plainText() }
+        is ReaderBlock.NumberedList -> items.map { it.plainText() }
+        is ReaderBlock.Image -> emptyList()
+        is ReaderBlock.Figure -> listOfNotNull(caption?.plainText())
+        ReaderBlock.Divider -> emptyList()
+    }
+
+private fun List<ReaderInline>.plainText(): String =
+    joinToString(separator = "") { it.text }.replace(Regex("\\s+"), " ").trim()
+
+private fun String.chunkForTextToSpeech(): List<String> {
+    val maxLength = TextToSpeech.getMaxSpeechInputLength().coerceAtMost(3_500)
+    if (length <= maxLength) return listOf(this)
+    return chunked(maxLength).map { it.trim() }.filter { it.isNotEmpty() }
+}
+
 private const val SpeedReaderWordsPerMinute = 300
 private const val SpeedReaderInitialPauseMillis = 300L
 
@@ -879,7 +2329,7 @@ private fun SpeedReaderOverlay(
     val muted = remember(palette) { Color(android.graphics.Color.parseColor(palette.muted)) }
     val readerFontFamily = readerFont.fontFamily
     var wordIndex by rememberSaveable(words) { mutableIntStateOf(0) }
-    val window = (LocalContext.current as? Activity)?.window
+    val window = LocalActivity.current?.window
 
     DisposableEffect(window) {
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -1287,16 +2737,298 @@ private fun readerAnnotatedString(
 
 private const val ReaderUrlAnnotation = "reader-url"
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun TextPost(story: Story) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        Text(story.title, style = MaterialTheme.typography.headlineSmall)
-        if (!story.text.isNullOrBlank()) {
-            Text(
-                story.text,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 12.dp),
+private fun PdfArticle(
+    url: String,
+    title: String,
+    topPad: androidx.compose.ui.unit.Dp,
+    onOpenExternally: () -> Unit,
+) {
+    val app = LocalContext.current.applicationContext as KioskApp
+    val pdfState by produceState<UiState<File>>(initialValue = UiState.Loading, url) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { app.okHttpClient.downloadPdf(url, File(app.cacheDir, "pdf")) }
+                .fold(
+                    onSuccess = { UiState.Content(it) },
+                    onFailure = { UiState.Error(it) },
+                )
+        }
+    }
+
+    when (val state = pdfState) {
+        UiState.Loading -> Box(Modifier.fillMaxSize().padding(top = topPad), contentAlignment = Alignment.Center) {
+            LoadingIndicator()
+        }
+        is UiState.Error -> PdfError(title = title, topPad = topPad, onOpenExternally = onOpenExternally)
+        is UiState.Content -> PdfDocument(
+            file = state.data,
+            title = title,
+            topPad = topPad,
+            onOpenExternally = onOpenExternally,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun PdfDocument(
+    file: File,
+    title: String,
+    topPad: androidx.compose.ui.unit.Dp,
+    onOpenExternally: () -> Unit,
+) {
+    val pageCountState by produceState<UiState<Int>>(initialValue = UiState.Loading, file) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { file.pdfPageCount() }
+                .fold(
+                    onSuccess = { UiState.Content(it) },
+                    onFailure = { UiState.Error(it) },
+                )
+        }
+    }
+
+    when (val state = pageCountState) {
+        UiState.Loading -> Box(Modifier.fillMaxSize().padding(top = topPad), contentAlignment = Alignment.Center) {
+            LoadingIndicator()
+        }
+        is UiState.Error -> PdfError(title = title, topPad = topPad, onOpenExternally = onOpenExternally)
+        is UiState.Content -> LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = topPad + 12.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(state.data, key = { page -> "pdf-page-$page" }) { page ->
+                PdfPage(file = file, pageIndex = page)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun PdfPage(
+    file: File,
+    pageIndex: Int,
+) {
+    val density = LocalDensity.current
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        val widthPx = with(density) { maxWidth.roundToPx() }.coerceAtLeast(1)
+        val pageState by produceState<UiState<Bitmap>>(initialValue = UiState.Loading, file, pageIndex, widthPx) {
+            value = withContext(Dispatchers.IO) {
+                runCatching { file.renderPdfPage(pageIndex, widthPx) }
+                    .fold(
+                        onSuccess = { UiState.Content(it) },
+                        onFailure = { UiState.Error(it) },
+                    )
+            }
+        }
+        when (val state = pageState) {
+            UiState.Loading -> Box(
+                modifier = Modifier.fillMaxWidth().height(320.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                LoadingIndicator()
+            }
+            is UiState.Error -> Text(
+                text = stringResource(R.string.pdf_page_unavailable),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(24.dp),
             )
+            is UiState.Content -> Image(
+                bitmap = state.data.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PdfError(
+    title: String,
+    topPad: androidx.compose.ui.unit.Dp,
+    onOpenExternally: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(top = topPad)
+            .padding(horizontal = 24.dp, vertical = 24.dp),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = stringResource(R.string.pdf_unavailable),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+        Button(
+            onClick = onOpenExternally,
+            modifier = Modifier.padding(top = 24.dp),
+        ) {
+            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.open_pdf))
+        }
+    }
+}
+
+private fun String.renderablePdfUrlOrNull(): String? {
+    val uri = runCatching { java.net.URI(this) }.getOrNull() ?: return null
+    val path = uri.path.orEmpty()
+    if (!path.substringAfterLast('/').endsWith(".pdf", ignoreCase = true)) return null
+
+    if (uri.host.equals("github.com", ignoreCase = true)) {
+        val segments = path.trim('/').split('/')
+        val blobIndex = segments.indexOf("blob")
+        if (blobIndex == 2 && segments.size > 4) {
+            val owner = segments[0]
+            val repo = segments[1]
+            val ref = segments[3]
+            val filePath = segments.drop(4).joinToString("/")
+            return "https://raw.githubusercontent.com/$owner/$repo/$ref/$filePath"
+        }
+    }
+
+    return this
+}
+
+private fun String.requiresWebView(): Boolean {
+    val host = runCatching { java.net.URI(this).host.orEmpty() }.getOrDefault("")
+        .removePrefix("www.")
+        .removePrefix("mobile.")
+        .removePrefix("m.")
+    return host == "twitter.com" ||
+        host == "x.com" ||
+        host == "youtube.com" ||
+        host == "youtu.be"
+}
+
+private fun OkHttpClient.downloadPdf(url: String, directory: File): File {
+    directory.mkdirs()
+    val target = File(directory, "${url.hashCode().toUInt()}.pdf")
+    if (target.exists() && target.hasPdfMagicHeader()) return target
+    if (target.exists()) target.delete()
+    newCall(Request.Builder().url(url).build()).execute().use { response ->
+        if (!response.isSuccessful) error("Could not download PDF: ${response.code}")
+        val body = response.body
+        val contentType = body.contentType()
+        val mimeLooksPdf = contentType?.type == "application" && contentType.subtype.equals("pdf", ignoreCase = true)
+        target.outputStream().use { output ->
+            BufferedInputStream(body.byteStream()).use { input ->
+                val header = ByteArray(PdfMagicHeader.size)
+                val bytesRead = input.read(header)
+                val bodyLooksPdf = bytesRead == PdfMagicHeader.size && header.contentEquals(PdfMagicHeader)
+                if (!mimeLooksPdf && !bodyLooksPdf) error("Response is not a PDF")
+                output.write(header, 0, bytesRead.coerceAtLeast(0))
+                input.copyTo(output)
+            }
+        }
+    }
+    return target
+}
+
+private val PdfMagicHeader = "%PDF-".encodeToByteArray()
+
+private fun File.hasPdfMagicHeader(): Boolean =
+    runCatching {
+        inputStream().use { input ->
+            val header = ByteArray(PdfMagicHeader.size)
+            input.read(header) == PdfMagicHeader.size && header.contentEquals(PdfMagicHeader)
+        }
+    }.getOrDefault(false)
+
+private fun File.pdfPageCount(): Int =
+    ParcelFileDescriptor.open(this, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
+        PdfRenderer(descriptor).use { renderer -> renderer.pageCount }
+    }
+
+private fun File.renderPdfPage(pageIndex: Int, widthPx: Int): Bitmap =
+    ParcelFileDescriptor.open(this, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
+        PdfRenderer(descriptor).use { renderer ->
+            renderer.openPage(pageIndex).use { page ->
+                val heightPx = (widthPx.toFloat() * page.height.toFloat() / page.width.toFloat())
+                    .toInt()
+                    .coerceAtLeast(1)
+                Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888).also { bitmap ->
+                    bitmap.eraseColor(android.graphics.Color.WHITE)
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                }
+            }
+        }
+    }
+
+@Composable
+private fun TextPost(
+    story: Story,
+    palette: ReaderPalette,
+    readerFont: ReaderFont,
+    listState: LazyListState,
+    topPad: androidx.compose.ui.unit.Dp,
+    onScroll: (Int) -> Unit,
+) {
+    val background = remember(palette) { Color(android.graphics.Color.parseColor(palette.background)) }
+    val foreground = remember(palette) { Color(android.graphics.Color.parseColor(palette.foreground)) }
+    val muted = remember(palette) { Color(android.graphics.Color.parseColor(palette.muted)) }
+    val readerFontFamily = readerFont.fontFamily
+    val latestOnScroll by androidx.compose.runtime.rememberUpdatedState(onScroll)
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.readerScrollKey() }
+            .collect { latestOnScroll(it) }
+    }
+
+    SelectionContainer {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().background(background),
+            contentPadding = PaddingValues(start = 24.dp, top = topPad, end = 24.dp, bottom = 72.dp),
+        ) {
+            item(key = "text-post") {
+                ReaderMeasure(modifier = Modifier.padding(top = 8.dp, bottom = 32.dp)) {
+                    Text(
+                        text = story.title,
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontFamily = readerFontFamily,
+                            fontSize = 34.sp,
+                            lineHeight = 41.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = foreground,
+                    )
+                    Text(
+                        text = story.by,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = readerFontFamily,
+                            fontSize = 16.sp,
+                            lineHeight = 24.sp,
+                        ),
+                        color = muted,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    story.text?.takeIf { it.isNotBlank() }?.let { text ->
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontFamily = readerFontFamily,
+                                fontSize = 20.sp,
+                                lineHeight = 34.sp,
+                            ),
+                            color = foreground,
+                            modifier = Modifier.padding(top = 32.dp),
+                        )
+                    }
+                }
+            }
         }
     }
 }

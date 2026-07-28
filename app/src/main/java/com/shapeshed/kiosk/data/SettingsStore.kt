@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -17,6 +18,9 @@ enum class ReaderTheme { SYSTEM, LIGHT, DARK, SEPIA }
 /** Reader body typeface choice. Monospace remains reserved for code blocks. */
 enum class ReaderFont { NEWSREADER, LITERATA, ATKINSON, SYSTEM_SANS }
 
+/** Default way to open story URLs. */
+enum class DefaultViewer { READER, WEB }
+
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 /** Persisted user settings, backed by Preferences DataStore. */
@@ -25,6 +29,9 @@ class SettingsStore(private val context: Context) {
     private val readerThemeKey = stringPreferencesKey("reader_theme")
     private val readerFontKey = stringPreferencesKey("reader_font")
     private val readerModeKey = booleanPreferencesKey("reader_mode")
+    private val defaultViewerKey = stringPreferencesKey("default_viewer")
+    private val readAloudSpeechRateKey = floatPreferencesKey("read_aloud_speech_rate")
+    private val readAloudVoiceNameKey = stringPreferencesKey("read_aloud_voice_name")
     private val viewedKey = stringSetPreferencesKey("viewed_story_ids")
     private val selectedFeedKey = stringPreferencesKey("selected_feed")
 
@@ -57,11 +64,48 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[readerFontKey] = font.name }
     }
 
-    /** Whether articles open in reader view (vs the raw web page). Defaults to reader. */
-    val readerModeEnabled: Flow<Boolean> = context.dataStore.data.map { it[readerModeKey] ?: true }
+    /** How story URLs open by default. Migrates the old reader-mode boolean setting. */
+    val defaultViewer: Flow<DefaultViewer> = context.dataStore.data.map { prefs ->
+        prefs[defaultViewerKey]
+            ?.let { runCatching { DefaultViewer.valueOf(it) }.getOrNull() }
+            ?: if (prefs[readerModeKey] == false) DefaultViewer.WEB else DefaultViewer.READER
+    }
 
-    suspend fun setReaderModeEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[readerModeKey] = enabled }
+    suspend fun setDefaultViewer(defaultViewer: DefaultViewer) {
+        context.dataStore.edit { prefs ->
+            prefs[defaultViewerKey] = defaultViewer.name
+            prefs.remove(readerModeKey)
+        }
+    }
+
+    val readAloudSpeechRate: Flow<Float> = context.dataStore.data.map { prefs ->
+        (prefs[readAloudSpeechRateKey] ?: DEFAULT_READ_ALOUD_SPEECH_RATE).coerceIn(
+            MIN_READ_ALOUD_SPEECH_RATE,
+            MAX_READ_ALOUD_SPEECH_RATE,
+        )
+    }
+
+    suspend fun setReadAloudSpeechRate(rate: Float) {
+        context.dataStore.edit { prefs ->
+            prefs[readAloudSpeechRateKey] = rate.coerceIn(
+                MIN_READ_ALOUD_SPEECH_RATE,
+                MAX_READ_ALOUD_SPEECH_RATE,
+            )
+        }
+    }
+
+    val readAloudVoiceName: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[readAloudVoiceNameKey]?.takeIf { it.isNotBlank() }
+    }
+
+    suspend fun setReadAloudVoiceName(voiceName: String?) {
+        context.dataStore.edit { prefs ->
+            if (voiceName.isNullOrBlank()) {
+                prefs.remove(readAloudVoiceNameKey)
+            } else {
+                prefs[readAloudVoiceNameKey] = voiceName
+            }
+        }
     }
 
     /** Ids of stories the user has opened, for read/unread styling. */
@@ -79,5 +123,8 @@ class SettingsStore(private val context: Context) {
 
     private companion object {
         const val MAX_VIEWED = 2000
+        const val DEFAULT_READ_ALOUD_SPEECH_RATE = 1f
+        const val MIN_READ_ALOUD_SPEECH_RATE = 0.7f
+        const val MAX_READ_ALOUD_SPEECH_RATE = 1.4f
     }
 }

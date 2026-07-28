@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** Backs a single story's article screen: the story itself, and its comments (loaded on demand). */
+/** Backs a single story's article screen: the story itself, and its prefetched comments. */
 class ArticleViewModel(
     private val repository: HnRepository,
     private val storyId: Long,
@@ -29,27 +29,40 @@ class ArticleViewModel(
     private var commentsRequested = false
 
     init {
-        loadStory()
+        loadStory(prefetchComments = true)
     }
 
     fun loadStory() {
+        loadStory(prefetchComments = true)
+    }
+
+    private fun loadStory(prefetchComments: Boolean) {
         viewModelScope.launch {
             _story.value = UiState.Loading
-            _story.value = runCatching { repository.story(storyId) ?: error("story $storyId not found") }
-                .fold({ UiState.Content(it) }, { UiState.Error(it) })
+            val result = runCatching { repository.story(storyId) ?: error("story $storyId not found") }
+            _story.value = result.fold({ UiState.Content(it) }, { UiState.Error(it) })
+            result.getOrNull()?.takeIf { prefetchComments }?.let(::loadComments)
         }
     }
 
-    /** Fetch the comment thread the first time the sheet is opened; a no-op afterwards. */
+    /** Fetch the comment thread the first time it is requested; a no-op afterwards. */
     fun loadComments() {
+        loadComments((_story.value as? UiState.Content)?.data)
+    }
+
+    private fun loadComments(story: Story?) {
         if (commentsRequested) return
         commentsRequested = true
         viewModelScope.launch {
             _comments.value = runCatching {
-                val story = (_story.value as? UiState.Content)?.data
+                val loadedStory = story
                     ?: repository.story(storyId)
                     ?: error("story $storyId not found")
-                repository.commentThread(story)
+                if (loadedStory.kids.isEmpty()) {
+                    emptyList()
+                } else {
+                    repository.commentThread(loadedStory)
+                }
             }.fold({ UiState.Content(it) }, { UiState.Error(it) })
         }
     }

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.ExpandedFullScreenContainedSearchBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -65,7 +66,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -96,7 +96,10 @@ private val FEEDS = Feed.entries
 @Composable
 fun StoriesScreen(
     selectedStoryId: Long?,
-    onOpenStory: (Long, ArticleRendererOverride?) -> Unit,
+    settingsSelected: Boolean,
+    onFeedStoriesChange: (Feed, List<Long>) -> Unit,
+    onOpenStory: (Feed?, Long, ArticleRendererOverride?) -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val app = LocalContext.current.applicationContext as KioskApp
@@ -164,6 +167,18 @@ fun StoriesScreen(
                     IconButton(onClick = { textFieldState.setTextAndPlaceCursorAtEnd("") }) {
                         Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.clear_search))
                     }
+                } else if (!isSearchExpanded) {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            Icons.Rounded.Settings,
+                            contentDescription = stringResource(R.string.settings),
+                            tint = if (settingsSelected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
                 }
             },
         )
@@ -171,13 +186,12 @@ fun StoriesScreen(
 
     Box(modifier.fillMaxSize()) {
         Scaffold(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = MaterialTheme.colorScheme.surface,
             topBar = {
                 Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                     SearchBar(
                         state = searchBarState,
                         inputField = searchInputField,
-                        colors = SearchBarDefaults.containedColors(searchBarState),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
@@ -203,6 +217,7 @@ fun StoriesScreen(
                 FeedPane(
                     feed = FEEDS[page],
                     selectedStoryId = selectedStoryId,
+                    onStoryOrderChange = onFeedStoriesChange,
                     onOpenStory = onOpenStory,
                 )
             }
@@ -222,12 +237,7 @@ fun StoriesScreen(
                 onOpenStory = { id ->
                     searchViewModel.markViewed(id)
                     scope.launch { searchBarState.animateToCollapsed() }
-                    onOpenStory(id, null)
-                },
-                onOpenStoryWithRenderer = { id, renderer ->
-                    searchViewModel.markViewed(id)
-                    scope.launch { searchBarState.animateToCollapsed() }
-                    onOpenStory(id, renderer)
+                    onOpenStory(null, id, null)
                 },
                 viewModel = searchViewModel,
             )
@@ -247,7 +257,7 @@ private fun FeedTabs(
 ) {
     PrimaryScrollableTabRow(
         selectedTabIndex = selectedIndex,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        containerColor = MaterialTheme.colorScheme.surface,
         // Zero edge padding + the Tab's built-in 16dp text padding lands the first label at the
         // same 16dp start inset as the app-bar title, so "Top" aligns under "Kiosk".
         edgePadding = 0.dp,
@@ -277,7 +287,6 @@ private fun SearchResultsPane(
     onFilterChange: (SearchFilter) -> Unit,
     onSortChange: (SearchSort) -> Unit,
     onOpenStory: (Long) -> Unit,
-    onOpenStoryWithRenderer: (Long, ArticleRendererOverride) -> Unit,
     viewModel: SearchViewModel,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -312,7 +321,6 @@ private fun SearchResultsPane(
                         loadingMore = loadingMore,
                         onLoadMore = viewModel::loadMore,
                         onOpenStory = onOpenStory,
-                        onOpenStoryWithRenderer = onOpenStoryWithRenderer,
                     )
                 }
             }
@@ -372,7 +380,8 @@ private fun selectedIcon(selected: Boolean): (@Composable () -> Unit)? =
 private fun FeedPane(
     feed: Feed,
     selectedStoryId: Long?,
-    onOpenStory: (Long, ArticleRendererOverride?) -> Unit,
+    onStoryOrderChange: (Feed, List<Long>) -> Unit,
+    onOpenStory: (Feed?, Long, ArticleRendererOverride?) -> Unit,
     viewModel: StoriesViewModel = viewModel(
         key = "feed-${feed.name}",
         factory = StoriesViewModel.factory(feed),
@@ -387,25 +396,30 @@ private fun FeedPane(
         when (val current = state) {
             is UiState.Loading -> LoadingIndicator()
             is UiState.Error -> ErrorState(onRetry = viewModel::load)
-            is UiState.Content -> PullToRefreshBox(
-                isRefreshing = refreshing,
-                onRefresh = viewModel::refresh,
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                StoryList(
+            is UiState.Content -> {
+                LaunchedEffect(feed, current.data) {
+                    onStoryOrderChange(feed, current.data.map(Story::id))
+                }
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = viewModel::refresh,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    StoryList(
+                        stories = current.data,
+                        selectedStoryId = selectedStoryId,
+                        viewedIds = viewedIds,
+                        loadingMore = loadingMore,
+                        onLoadMore = viewModel::loadMore,
+                        onOpenStory = { id ->
+                            viewModel.markViewed(id)
+                            onOpenStory(feed, id, null)
+                        },
+                    )
+                }
+                ReaderExtractionPreloader(
                     stories = current.data,
-                    selectedStoryId = selectedStoryId,
-                    viewedIds = viewedIds,
-                    loadingMore = loadingMore,
-                    onLoadMore = viewModel::loadMore,
-                    onOpenStory = { id ->
-                        viewModel.markViewed(id)
-                        onOpenStory(id, null)
-                    },
-                    onOpenStoryWithRenderer = { id, renderer ->
-                        viewModel.markViewed(id)
-                        onOpenStory(id, renderer)
-                    },
+                    modifier = Modifier.align(Alignment.BottomEnd),
                 )
             }
         }
@@ -421,7 +435,6 @@ private fun StoryList(
     loadingMore: Boolean,
     onLoadMore: () -> Unit,
     onOpenStory: (Long) -> Unit,
-    onOpenStoryWithRenderer: (Long, ArticleRendererOverride) -> Unit = { id, _ -> onOpenStory(id) },
 ) {
     val listState = rememberLazyListState()
     // Load the next page once the last few rows come into view.
@@ -437,24 +450,16 @@ private fun StoryList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(1.dp),
+        contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        itemsIndexed(stories, key = { _, story -> story.id }) { index, story ->
-            // Gmail-style group: only the very first row is rounded, and only on top; the rest
-            // are square and hairline-separated, so the list reads as one continuous block.
+        itemsIndexed(stories, key = { _, story -> story.id }) { _, story ->
             StoryCard(
                 story = story,
                 selected = story.id == selectedStoryId,
                 viewed = story.id in viewedIds,
-                shape = if (index == 0) {
-                    RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-                } else {
-                    RectangleShape
-                },
+                shape = RoundedCornerShape(20.dp),
                 onClick = { onOpenStory(story.id) },
-                onOpenWebReader = { onOpenStoryWithRenderer(story.id, ArticleRendererOverride.WEB_READER) },
-                onOpenNativeReader = { onOpenStoryWithRenderer(story.id, ArticleRendererOverride.NATIVE_READER) },
             )
         }
         if (loadingMore) {
@@ -474,16 +479,14 @@ private fun StoryCard(
     viewed: Boolean,
     shape: Shape,
     onClick: () -> Unit,
-    onOpenWebReader: () -> Unit,
-    onOpenNativeReader: () -> Unit,
 ) {
     val titleColor = when {
-        selected -> MaterialTheme.colorScheme.onSecondaryContainer
+        selected -> MaterialTheme.colorScheme.onPrimaryContainer
         viewed -> MaterialTheme.colorScheme.onSurfaceVariant
         else -> MaterialTheme.colorScheme.onSurface
     }
     val supportingColor = if (selected) {
-        MaterialTheme.colorScheme.onSecondaryContainer
+        MaterialTheme.colorScheme.onPrimaryContainer
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
@@ -492,9 +495,9 @@ private fun StoryCard(
         onClick = onClick,
         shape = shape,
         color = if (selected) {
-            MaterialTheme.colorScheme.secondaryContainer
+            MaterialTheme.colorScheme.primaryContainer
         } else {
-            MaterialTheme.colorScheme.surfaceContainerLowest
+            MaterialTheme.colorScheme.surfaceContainerLow
         },
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -510,12 +513,6 @@ private fun StoryCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                }
-            },
-            trailingContent = {
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    TextButton(onClick = onOpenWebReader) { Text("Web") }
-                    TextButton(onClick = onOpenNativeReader) { Text("Native") }
                 }
             },
         ) {

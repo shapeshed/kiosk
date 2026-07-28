@@ -7,6 +7,8 @@ import coil3.SingletonImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.shapeshed.kiosk.data.HnApi
 import com.shapeshed.kiosk.data.HnRepository
+import com.shapeshed.kiosk.data.ReaderCacheDatabase
+import com.shapeshed.kiosk.data.ReaderExtractionStore
 import com.shapeshed.kiosk.data.SettingsStore
 import okhttp3.Cache
 import okhttp3.Dispatcher
@@ -37,6 +39,12 @@ class KioskApp : Application(), SingletonImageLoader.Factory {
     }
 
     val repository: HnRepository by lazy { HnRepository(HnApi(okHttpClient)) }
+
+    private val readerCacheDatabase: ReaderCacheDatabase by lazy { ReaderCacheDatabase.create(this) }
+
+    val readerExtractions: ReaderExtractionStore by lazy {
+        ReaderExtractionStore(readerCacheDatabase.readerExtractionDao())
+    }
 
     val settings: SettingsStore by lazy { SettingsStore(this) }
 

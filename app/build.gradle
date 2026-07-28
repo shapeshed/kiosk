@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.application'
+    id 'com.google.devtools.ksp'
     id 'org.jetbrains.kotlin.plugin.compose'
 }
 
@@ -49,6 +50,10 @@ android {
             returnDefaultValues = true
         }
     }
+
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
 }
 
 dependencies {
@@ -81,6 +86,10 @@ dependencies {
     implementation 'io.coil-kt.coil3:coil-svg:3.5.0'
     implementation 'androidx.concurrent:concurrent-futures-ktx:1.3.0'
     implementation 'org.jsoup:jsoup:1.22.2'
+    def roomVersion = '2.8.4'
+    implementation "androidx.room:room-runtime:$roomVersion"
+    implementation "androidx.room:room-ktx:$roomVersion"
+    ksp "androidx.room:room-compiler:$roomVersion"
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20240303'
