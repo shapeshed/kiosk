@@ -21,7 +21,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import com.shapeshed.kiosk.KioskApp
 import com.shapeshed.kiosk.R
 import com.shapeshed.kiosk.data.Feed
 import kotlinx.coroutines.launch
@@ -34,6 +36,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
 fun KioskListDetail() {
+    val app = LocalContext.current.applicationContext as KioskApp
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
     val scope = rememberCoroutineScope()
     val selectedDestination = navigator.currentDestination?.contentKey?.toArticleDestinationOrNull()
@@ -46,6 +49,16 @@ fun KioskListDetail() {
     val activeStoryIndex = selectedId?.let(activeStoryIds::indexOf) ?: -1
     val previousStoryInListId = activeStoryIds.getOrNull(activeStoryIndex - 1)
     val nextStoryInListId = activeStoryIds.getOrNull(activeStoryIndex + 1)
+    fun openStory(feed: Feed?, id: Long, renderer: ArticleRendererOverride?) {
+        activeFeed = feed
+        scope.launch {
+            app.settings.markViewed(id)
+            navigator.navigateTo(
+                ListDetailPaneScaffoldRole.Detail,
+                ArticleDestination(storyId = id, renderer = renderer).toNavigationKey(),
+            )
+        }
+    }
 
     NavigableListDetailPaneScaffold(
         navigator = navigator,
@@ -57,15 +70,7 @@ fun KioskListDetail() {
                     onFeedStoriesChange = { feed, storyIds ->
                         storyIdsByFeed[feed] = storyIds
                     },
-                    onOpenStory = { feed, id, renderer ->
-                        activeFeed = feed
-                        scope.launch {
-                            navigator.navigateTo(
-                                ListDetailPaneScaffoldRole.Detail,
-                                ArticleDestination(storyId = id, renderer = renderer).toNavigationKey(),
-                            )
-                        }
-                    },
+                    onOpenStory = ::openStory,
                     onOpenSettings = {
                         scope.launch {
                             navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, SettingsDestinationKey)
@@ -91,7 +96,6 @@ fun KioskListDetail() {
                                 storyIds = activeStoryIds,
                                 previousStoryId = previousStoryInListId,
                                 nextStoryId = nextStoryInListId,
-                                onOpenAdjacentStory = {},
                                 showBack = navigator.canNavigateBack(),
                                 onBack = { scope.launch { navigator.navigateBack() } },
                             )

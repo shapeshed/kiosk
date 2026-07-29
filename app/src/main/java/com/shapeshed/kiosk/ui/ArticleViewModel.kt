@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** Backs a single story's article screen: the story itself, and its prefetched comments. */
+/** Backs a single story's article screen: the story itself, and comments when requested. */
 class ArticleViewModel(
     private val repository: HnRepository,
     private val storyId: Long,
@@ -29,19 +29,14 @@ class ArticleViewModel(
     private var commentsRequested = false
 
     init {
-        loadStory(prefetchComments = true)
+        loadStory()
     }
 
     fun loadStory() {
-        loadStory(prefetchComments = true)
-    }
-
-    private fun loadStory(prefetchComments: Boolean) {
         viewModelScope.launch {
             _story.value = UiState.Loading
             val result = runCatching { repository.story(storyId) ?: error("story $storyId not found") }
             _story.value = result.fold({ UiState.Content(it) }, { UiState.Error(it) })
-            result.getOrNull()?.takeIf { prefetchComments }?.let(::loadComments)
         }
     }
 

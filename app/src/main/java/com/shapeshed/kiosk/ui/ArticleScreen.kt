@@ -24,6 +24,8 @@ import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
+import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.view.ViewGroup
 import android.webkit.WebView
@@ -131,6 +133,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -185,6 +188,7 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.BufferedInputStream
 import java.io.File
+import kotlin.math.abs
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -194,6 +198,8 @@ private const val EXTRACT_JS =
         "['caption','emoji','hidden','invisible','sr-only','visually-hidden','visuallyhidden'," +
         "'wp-caption','wp-caption-text','wp-smiley']}).parse();" +
         "return a?JSON.stringify({t:a.title,c:a.content,x:a.textContent||''}):\"\";}catch(e){return \"\";}})();"
+
+private const val ReaderTopGap = 24
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -219,10 +225,7 @@ fun ArticleScreen(
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as KioskApp
-    var activeStoryId by rememberSaveable { mutableLongStateOf(storyId) }
-    LaunchedEffect(storyId) {
-        activeStoryId = storyId
-    }
+    var activeStoryId by rememberSaveable(storyId) { mutableLongStateOf(storyId) }
     val activeStoryIndex = storyIds.indexOf(activeStoryId)
     val effectivePreviousStoryId = if (activeStoryIndex >= 0) {
         storyIds.getOrNull(activeStoryIndex - 1)
@@ -253,11 +256,13 @@ fun ArticleScreen(
     val fontFaceCss = rememberReaderFontFaceCss(readerFont)
     // Matches the reader stylesheet background (see buildReaderHtml) so covers/flash are seamless.
     val pageBackground = android.graphics.Color.parseColor(palette.background)
+    val webPageBackground = MaterialTheme.colorScheme.surface.toArgb()
     // Reader content sits below the overlay bar: pad the top by status-bar + app-bar height (CSS
     // px ≈ dp). The bar only hides after scrolling down, so by then this padding is off-screen.
     val density = LocalDensity.current
     // status-bar/notch height (dp) + app-bar (64dp) + a comfortable gap.
     val readerTopPad = (WindowInsets.statusBarsIgnoringVisibility.getTop(density) / density.density).toInt() + 88
+    val webViewTopPad = (readerTopPad - ReaderTopGap).coerceAtLeast(0)
 
     // Reader vs web is a persisted preference (applies to every article); readerFailed is a
     // per-article fallback to web when Readability can't extract this page.
@@ -455,8 +460,8 @@ fun ArticleScreen(
                     readerMode = false,
                     readerHtml = null,
                     pageReady = true,
-                    pageBackground = pageBackground,
-                    contentTopPad = readerTopPad.dp,
+                    pageBackground = webPageBackground,
+                    contentTopPad = webViewTopPad.dp,
                     onPageReady = {},
                     onReaderShownChange = {},
                     onScroll = { scrollY ->
@@ -496,8 +501,8 @@ fun ArticleScreen(
                             readerMode = readerMode,
                             readerHtml = if (webReaderReady) readerHtml else null,
                             pageReady = pageReady,
-                            pageBackground = pageBackground,
-                            contentTopPad = if (readerMode) 0.dp else readerTopPad.dp,
+                            pageBackground = if (readerMode) pageBackground else webPageBackground,
+                            contentTopPad = if (readerMode) 0.dp else webViewTopPad.dp,
                             onPageReady = { pageReady = true },
                             onReaderShownChange = { readerShown = it },
                             onScroll = { scrollY ->
@@ -556,14 +561,18 @@ fun ArticleScreen(
             (effectivePreviousStoryId != null || effectiveNextStoryId != null)
         ) {
             val pagerState = rememberPagerState(initialPage = activeStoryIndex) { storyIds.size }
+            var aligningPagerToStory by remember { mutableStateOf(false) }
 
             LaunchedEffect(storyId, activeStoryIndex) {
+                aligningPagerToStory = true
                 if (activeStoryIndex >= 0 && pagerState.currentPage != activeStoryIndex) {
                     pagerState.scrollToPage(activeStoryIndex)
                 }
+                aligningPagerToStory = false
             }
-            LaunchedEffect(pagerState, storyIds, activeStoryId) {
+            LaunchedEffect(pagerState, storyIds, activeStoryId, activeStoryIndex) {
                 snapshotFlow { pagerState.settledPage }.collect { page ->
+                    if (aligningPagerToStory) return@collect
                     val adjacentStoryId = storyIds.getOrNull(page)
                     if (adjacentStoryId != null && adjacentStoryId != activeStoryId) {
                         activeStoryId = adjacentStoryId
@@ -577,19 +586,20 @@ fun ArticleScreen(
                 state = pagerState,
                 key = { storyIds[it] },
                 beyondViewportPageCount = 2,
-                modifier = Modifier.fillMaxSize().background(Color(pageBackground)),
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
             ) { page ->
                 val articleStoryId = storyIds[page]
+                val shouldKeepWebView = abs(page - activeStoryIndex) <= 1
                 ArticleScreen(
                     storyId = articleStoryId,
                     showBack = false,
                     onBack = {},
                     modifier = Modifier.fillMaxSize(),
-                    rendererOverride = if (articleStoryId == activeStoryId) selectedRendererOverride else null,
+                    rendererOverride = selectedRendererOverride,
                     storyIds = storyIds,
                     showChrome = false,
                     enableStoryPager = false,
-                    allowWebView = articleStoryId == activeStoryId,
+                    allowWebView = shouldKeepWebView,
                     externalReadAloudBlockIndex = if (articleStoryId == activeStoryId) {
                         currentReadAloudBlockIndex
                     } else {
@@ -637,7 +647,10 @@ fun ArticleScreen(
                             val commentCount = story?.descendants ?: 0
                             val hasComments = commentCount > 0 || story?.kids?.isNotEmpty() == true
                             if (hasComments) {
-                                IconButton(onClick = { showComments = true }) {
+                                IconButton(onClick = {
+                                    viewModel.loadComments()
+                                    showComments = true
+                                }) {
                                     Icon(
                                         Icons.AutoMirrored.Filled.Comment,
                                         stringResource(R.string.comments),
@@ -1025,11 +1038,14 @@ private fun ArticleWebView(
     val readabilityJs = rememberReadabilityScript()
     val holder = remember { WebViewHolder() }
     val latestOnScroll by androidx.compose.runtime.rememberUpdatedState(onScroll)
+    val chromeBackground = MaterialTheme.colorScheme.surface
 
     androidx.compose.ui.viewinterop.AndroidView(
-        // Web mode: offset the whole WebView below the pinned bar (a WebView ignores its own top
-        // padding for content layout). Reader mode uses CSS padding instead, so this is 0.
-        modifier = Modifier.fillMaxSize().background(Color(pageBackground)).padding(top = contentTopPad),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(chromeBackground)
+            .padding(top = contentTopPad)
+            .background(Color(pageBackground)),
         factory = { ctx ->
             WebView(ctx).apply {
                 layoutParams = ViewGroup.LayoutParams(
@@ -1040,6 +1056,31 @@ private fun ArticleWebView(
                 isHapticFeedbackEnabled = false
                 setOnScrollChangeListener { _, _, scrollY, _, _ ->
                     latestOnScroll(scrollY)
+                }
+                val touchSlop = ViewConfiguration.get(ctx).scaledTouchSlop
+                var downX = 0f
+                var downY = 0f
+                setOnTouchListener { view, event ->
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> {
+                            downX = event.x
+                            downY = event.y
+                            view.parent.requestDisallowInterceptTouchEvent(true)
+                        }
+                        MotionEvent.ACTION_MOVE -> {
+                            val dx = abs(event.x - downX)
+                            val dy = abs(event.y - downY)
+                            if (dx > touchSlop || dy > touchSlop) {
+                                view.parent.requestDisallowInterceptTouchEvent(dy >= dx)
+                            }
+                        }
+                        MotionEvent.ACTION_UP,
+                        MotionEvent.ACTION_CANCEL,
+                        -> {
+                            view.parent.requestDisallowInterceptTouchEvent(false)
+                        }
+                    }
+                    false
                 }
                 // Match the reader background so there's no white flash while (re)loading.
                 setBackgroundColor(pageBackground)
