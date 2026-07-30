@@ -1,4 +1,4 @@
-Kiosk is a deliberately boring Hacker News reader for Android.
+Kiosk is a Hacker News reader for Android.
 
 It is built around reading, not browsing. Browse Hacker News feeds, search historical stories, read articles in a distraction-free native reader, and keep comments close at hand.
 
