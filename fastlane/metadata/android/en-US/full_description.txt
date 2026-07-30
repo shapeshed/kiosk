@@ -1,0 +1,15 @@
+Kiosk is a deliberately boring Hacker News reader for Android.
+
+It is built around reading, not browsing. Browse Hacker News feeds, search historical stories, read articles in a distraction-free native reader, and keep comments close at hand.
+
+Features:
+- Browse Top, New, Best, Ask, Show, and Jobs.
+- Search historical Hacker News stories.
+- Read articles in a native reader powered by Mozilla Readability.
+- Swipe between stories in the current feed.
+- Open comments quickly in a bottom sheet.
+- Use reader themes, fonts, Speed Reader, and Read Aloud.
+- Expand article images and pinch to zoom.
+- Open PDFs, X/Twitter, YouTube, and external links in the default app or browser.
+
+Kiosk has no accounts, ads, analytics, tracking SDKs, Firebase, Crashlytics, or Google Play Services dependency.

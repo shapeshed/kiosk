@@ -58,8 +58,11 @@ app/src/main/java/com/shapeshed/kiosk/
   time; items are fetched concurrently on `Dispatchers.IO`.
 - A disk HTTP cache accelerates relaunches and stories shared across feeds; feed id lists stay
   `no-cache` so pull-to-refresh is always fresh.
-- Articles render in an in-app `WebView` with a Reader view (vendored Mozilla Readability.js at
-  `app/src/main/assets/readability.js`); comments open in a modal bottom sheet.
+- Articles render in a native reader. A hidden, image-blocking `WebView` is used only to run the
+  vendored Mozilla Readability.js extractor at `app/src/main/assets/readability.js`; PDFs,
+  X/Twitter, YouTube, and links open in the default external app/browser.
+- Reader extractions are warmed around the visible story list and stored in memory and Room-backed
+  disk cache. Comments for the active article are preloaded shortly after the article opens.
 - Settings persist in a Preferences DataStore (`SettingsStore`).
 
 The parsing, thread-flattening, and text helpers in `data/` are pure and covered by unit tests;
@@ -67,9 +70,38 @@ keep them free of Android and Compose types so they stay testable without Robole
 
 ## Signing / Release
 
-There is no release signing or store-publishing pipeline set up yet. Local release builds are
-unsigned:
+Local unsigned release build:
 
 ```sh
 ./gradlew :app:assembleRelease   # app/build/outputs/apk/release/app-release-unsigned.apk
 ```
+
+Local signed release builds use environment variables:
+
+```sh
+export KIOSK_KEYSTORE_FILE=/path/to/kiosk-release.jks
+export KIOSK_KEYSTORE_PASSWORD=...
+export KIOSK_KEY_ALIAS=...
+export KIOSK_KEY_PASSWORD=...
+./gradlew :app:assembleRelease :app:bundleRelease
+```
+
+CI can also decode `KIOSK_KEYSTORE_BASE64` into a temporary keystore. The secret values must be set
+in the Kiosk repository or as organization secrets available to this repository; they cannot be read
+back or copied from another repository once stored.
+
+## CI
+
+GitHub Actions:
+
+- `CI`: quality gate and debug APK artifact on pull requests and `main`.
+- `Nightly Build`: scheduled/manual signed release APK, replacing the `nightly` prerelease.
+- `GitHub Release`: `v*` tag build, producing signed APK/AAB artifacts and a draft GitHub release.
+
+GitLab CI:
+
+- `quality`: quality gate.
+- `nightly`: scheduled/manual APK artifacts.
+- `tag-build`: tag APK/AAB artifacts.
+
+Neither CI setup uploads to Google Play.

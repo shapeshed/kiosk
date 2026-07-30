@@ -41,7 +41,6 @@ fun KioskListDetail() {
     val scope = rememberCoroutineScope()
     val selectedDestination = navigator.currentDestination?.contentKey?.toArticleDestinationOrNull()
     val selectedId = selectedDestination?.storyId
-    val settingsSelected = navigator.currentDestination?.contentKey == SettingsDestinationKey
     val showListSelection = LocalConfiguration.current.screenWidthDp >= 600
     val storyIdsByFeed = remember { mutableStateMapOf<Feed, List<Long>>() }
     var activeFeed by rememberSaveable { mutableStateOf<Feed?>(null) }
@@ -66,43 +65,29 @@ fun KioskListDetail() {
             AnimatedPane {
                 StoriesScreen(
                     selectedStoryId = selectedId?.takeIf { showListSelection },
-                    settingsSelected = settingsSelected,
                     onFeedStoriesChange = { feed, storyIds ->
                         storyIdsByFeed[feed] = storyIds
                     },
                     onOpenStory = ::openStory,
-                    onOpenSettings = {
-                        scope.launch {
-                            navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, SettingsDestinationKey)
-                        }
-                    },
                 )
             }
         },
         detailPane = {
             AnimatedPane {
                 val contentKey = navigator.currentDestination?.contentKey
-                when {
-                    contentKey == SettingsDestinationKey -> SettingsScreen(
+                val destination = contentKey?.toArticleDestinationOrNull()
+                if (destination != null) {
+                    ArticleScreen(
+                        storyId = destination.storyId,
+                        rendererOverride = destination.renderer,
+                        storyIds = activeStoryIds,
+                        previousStoryId = previousStoryInListId,
+                        nextStoryId = nextStoryInListId,
                         showBack = navigator.canNavigateBack(),
                         onBack = { scope.launch { navigator.navigateBack() } },
                     )
-                    else -> {
-                        val destination = contentKey?.toArticleDestinationOrNull()
-                        if (destination != null) {
-                            ArticleScreen(
-                                storyId = destination.storyId,
-                                rendererOverride = destination.renderer,
-                                storyIds = activeStoryIds,
-                                previousStoryId = previousStoryInListId,
-                                nextStoryId = nextStoryInListId,
-                                showBack = navigator.canNavigateBack(),
-                                onBack = { scope.launch { navigator.navigateBack() } },
-                            )
-                        } else {
-                            EmptyDetail()
-                        }
-                    }
+                } else {
+                    EmptyDetail()
                 }
             }
         },
@@ -119,8 +104,6 @@ enum class ArticleRendererOverride {
     WEB_READER,
     NATIVE_READER,
 }
-
-private const val SettingsDestinationKey = "settings"
 
 private fun ArticleDestination.toNavigationKey(): String =
     when (renderer) {

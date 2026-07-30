@@ -1,0 +1,5 @@
+Initial release baseline:
+- Six Hacker News feeds and historical search.
+- Native reader with warmed Readability extraction cache.
+- Comments, Speed Reader, Read Aloud, and zoomable article images.
+- External handling for PDFs, X/Twitter, YouTube, and links.

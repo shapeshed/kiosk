@@ -35,6 +35,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
@@ -44,6 +45,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,6 +65,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -80,11 +83,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -129,6 +132,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -166,7 +170,6 @@ import coil3.compose.AsyncImage
 import com.shapeshed.kiosk.KioskApp
 import com.shapeshed.kiosk.MainActivity
 import com.shapeshed.kiosk.R
-import com.shapeshed.kiosk.data.DefaultViewer
 import com.shapeshed.kiosk.data.FlatComment
 import com.shapeshed.kiosk.data.ReaderFont
 import com.shapeshed.kiosk.data.ReaderTheme
@@ -252,6 +255,9 @@ fun ArticleScreen(
     val readerFont by app.settings.readerFont.collectAsStateWithLifecycle(ReaderFont.NEWSREADER)
     val readAloudSpeechRate by app.settings.readAloudSpeechRate.collectAsStateWithLifecycle(1f)
     val readAloudVoiceName by app.settings.readAloudVoiceName.collectAsStateWithLifecycle(null)
+    val speedReaderWordsPerMinute by app.settings.speedReaderWordsPerMinute.collectAsStateWithLifecycle(350)
+    val speedReaderTheme by app.settings.speedReaderTheme.collectAsStateWithLifecycle(ReaderTheme.DARK)
+    val speedReaderFont by app.settings.speedReaderFont.collectAsStateWithLifecycle(ReaderFont.ATKINSON)
     val palette = readerPaletteFor(readerTheme, darkTheme)
     val fontFaceCss = rememberReaderFontFaceCss(readerFont)
     // Matches the reader stylesheet background (see buildReaderHtml) so covers/flash are seamless.
@@ -264,9 +270,7 @@ fun ArticleScreen(
     val readerTopPad = (WindowInsets.statusBarsIgnoringVisibility.getTop(density) / density.density).toInt() + 88
     val webViewTopPad = (readerTopPad - ReaderTopGap).coerceAtLeast(0)
 
-    // Reader vs web is a persisted preference (applies to every article); readerFailed is a
-    // per-article fallback to web when Readability can't extract this page.
-    val defaultViewer by app.settings.defaultViewer.collectAsStateWithLifecycle(DefaultViewer.READER)
+    // Kiosk is reader-first: WebView exists only as a hidden Readability extraction tool.
     var readerFailed by remember(activeStoryId) { mutableStateOf(false) }
     var selectedRendererOverride by remember(activeStoryId, activeRendererOverride) {
         mutableStateOf(activeRendererOverride)
@@ -274,12 +278,7 @@ fun ArticleScreen(
     val pdfArticleUrl = remember(story?.url) { story?.url?.renderablePdfUrlOrNull() }
     val isPdfArticle = pdfArticleUrl != null
     val forceWebArticle = remember(story?.url) { story?.url?.requiresWebView() == true }
-    val forceWebPage = selectedRendererOverride == ArticleRendererOverride.WEB_PAGE ||
-        (selectedRendererOverride == null && defaultViewer == DefaultViewer.WEB)
-    val readerMode = !isPdfArticle && !forceWebArticle &&
-        !forceWebPage &&
-        (selectedRendererOverride != null || (defaultViewer == DefaultViewer.READER && !readerFailed))
-    val forceWebReader = selectedRendererOverride == ArticleRendererOverride.WEB_READER
+    val readerMode = !isPdfArticle && !forceWebArticle && !readerFailed
     val forceNativeReader = selectedRendererOverride == ArticleRendererOverride.NATIVE_READER
     var extracted by remember(activeStoryId) { mutableStateOf<ReaderExtraction?>(null) }
     var pageReady by remember(activeStoryId) { mutableStateOf(false) }
@@ -337,20 +336,19 @@ fun ArticleScreen(
     }
     val speedReadWords = remember(extracted) { extracted?.textContent?.speedReadWords().orEmpty() }
     val readAloudSegments = remember(readerArticle) { readerArticle?.readAloudSegments().orEmpty() }
-    val readyNativeReaderArticle = if (readerMode && !forceWebReader && readerArticle?.blocks?.isNotEmpty() == true) {
+    val readyNativeReaderArticle = if (readerMode && readerArticle?.blocks?.isNotEmpty() == true) {
         readerArticle
     } else {
         null
     }
     val nativeReaderReady = readyNativeReaderArticle != null
-    val webReaderReady = readerMode && !forceNativeReader && readerHtml != null
     // Instagram-style: the bar shows on launch, then slides up off-screen (and the app goes
     // immersive) when scrolling down, and slides back on scrolling up. The bar OVERLAYS the
     // content (not the scaffold's top slot), so animating it never relayouts the WebView.
     var barVisible by remember(activeStoryId) { mutableStateOf(true) }
     // The reader hides its bar on scroll (immersive); the web view keeps the bar pinned so the
     // page can sit padded below it with no gap.
-    val immersiveEligible = !isPdfArticle && !forceWebArticle && !forceWebPage && !readerFailed
+    val immersiveEligible = !isPdfArticle && !forceWebArticle && !readerFailed
     val effectiveBarVisible = showChrome && !showSpeedReader && (!immersiveEligible || barVisible)
     // Previous WebView scroll position — tracked here because the View callback's oldScrollY is
     // unreliable for a WebView. Plain holder (no snapshot) so scroll events don't recompose.
@@ -382,6 +380,14 @@ fun ArticleScreen(
     }
     LaunchedEffect(nativeReaderReady) {
         if (nativeReaderReady) readerShown = true
+    }
+    LaunchedEffect(showChrome, activeStoryId, story?.id, story?.descendants, story?.kids) {
+        val currentStory = story ?: return@LaunchedEffect
+        if (!showChrome) return@LaunchedEffect
+        val hasComments = currentStory.descendants > 0 || currentStory.kids.isNotEmpty()
+        if (!hasComments) return@LaunchedEffect
+        delay(750)
+        viewModel.loadComments()
     }
     LaunchedEffect(pendingSpeedReader, speedReadWords) {
         if (pendingSpeedReader && speedReadWords.isNotEmpty()) {
@@ -449,31 +455,27 @@ fun ArticleScreen(
                         onArticleScroll(scrollY)
                     },
                 )
-                pdfArticleUrl != null -> PdfArticle(
-                    url = pdfArticleUrl,
-                    title = story.title,
+                pdfArticleUrl != null -> ExternalArticleFallback(
+                    story = story,
+                    message = stringResource(R.string.pdf_external_summary),
+                    buttonLabel = stringResource(R.string.open_in_pdf_reader),
+                    topPad = readerTopPad.dp,
+                    onOpenExternally = { openExternally(context, pdfArticleUrl) },
+                )
+                linkedUrl != null -> ExternalArticleFallback(
+                    story = story.copy(url = linkedUrl),
+                    message = stringResource(R.string.open_link_external_summary),
+                    buttonLabel = stringResource(R.string.open_in_browser),
+                    topPad = readerTopPad.dp,
+                    onOpenExternally = { openExternally(context, linkedUrl) },
+                )
+                forceWebArticle -> ExternalArticleFallback(
+                    story = story,
+                    message = stringResource(R.string.external_app_summary),
+                    buttonLabel = stringResource(R.string.open_in_browser),
                     topPad = readerTopPad.dp,
                     onOpenExternally = { openExternally(context, story.url) },
                 )
-                linkedUrl != null -> if (allowWebView) ArticleWebView(
-                    url = linkedUrl,
-                    readerMode = false,
-                    readerHtml = null,
-                    pageReady = true,
-                    pageBackground = webPageBackground,
-                    contentTopPad = webViewTopPad.dp,
-                    onPageReady = {},
-                    onReaderShownChange = {},
-                    onScroll = { scrollY ->
-                        val dy = scrollY - lastScrollY[0]
-                        lastScrollY[0] = scrollY
-                        if (dy > 12) barVisible = false
-                        else if (dy < -12) barVisible = true
-                        onArticleScroll(scrollY)
-                    },
-                    onExtracted = {},
-                    onExtractionFailed = {},
-                ) else Box(Modifier.fillMaxSize().background(Color(pageBackground)))
                 else -> {
                     if (readyNativeReaderArticle != null) {
                         NativeReaderArticle(
@@ -491,58 +493,62 @@ fun ArticleScreen(
                                 onArticleScroll(scrollY)
                             },
                             onOpenLink = { url ->
-                                openedLinkUrl = url
-                                barVisible = true
+                                openExternally(context, url)
                             },
                         )
                     } else {
-                        if (allowWebView) ArticleWebView(
-                            url = story.url,
-                            readerMode = readerMode,
-                            readerHtml = if (webReaderReady) readerHtml else null,
-                            pageReady = pageReady,
-                            pageBackground = if (readerMode) pageBackground else webPageBackground,
-                            contentTopPad = if (readerMode) 0.dp else webViewTopPad.dp,
-                            onPageReady = { pageReady = true },
-                            onReaderShownChange = { readerShown = it },
-                            onScroll = { scrollY ->
-                                val dy = scrollY - lastScrollY[0]
-                                lastScrollY[0] = scrollY
-                                if (dy > 12) barVisible = false      // scrolling down hides the bar
-                                else if (dy < -12) barVisible = true // scrolling up reveals it
-                                onArticleScroll(scrollY)
-                            },
-                            onExtracted = { extraction ->
-                                ReaderExtractionCache.put(activeStoryId, storyUrl, extraction)
-                                extracted = extraction
-                                scope.launch {
-                                    app.readerExtractions.put(
-                                        storyId = activeStoryId,
-                                        url = storyUrl,
-                                        title = extraction.title,
-                                        contentHtml = extraction.contentHtml,
-                                        textContent = extraction.textContent,
-                                    )
-                                }
-                            },
-                            onExtractionFailed = {
-                                if (!showChrome) {
-                                    return@ArticleWebView
-                                }
-                                if (extracted != null) return@ArticleWebView
-                                readerFailed = true
-                                pendingSpeedReader = false
-                                pendingReadAloud = false
-                                Toast.makeText(context, R.string.reader_unavailable, Toast.LENGTH_SHORT).show()
-                            },
-                        ) else Box(Modifier.fillMaxSize().background(Color(pageBackground)))
-                        // Cover the raw page until the native reader model is ready, so reader mode
-                        // still opens without a flash of web chrome.
-                        if (allowWebView && readerMode && !readerShown) {
-                            Box(
-                                Modifier.fillMaxSize().background(Color(pageBackground)),
-                                contentAlignment = Alignment.Center,
-                            ) { LoadingIndicator() }
+                        if (allowWebView && readerMode) {
+                            Box(Modifier.size(1.dp).alpha(0f)) {
+                                ArticleWebView(
+                                    url = story.url,
+                                    readerMode = true,
+                                    readerHtml = null,
+                                    pageReady = pageReady,
+                                    pageBackground = android.graphics.Color.TRANSPARENT,
+                                    contentTopPad = 0.dp,
+                                    onPageReady = { pageReady = true },
+                                    onReaderShownChange = {},
+                                    onScroll = {},
+                                    onExtracted = { extraction ->
+                                        ReaderExtractionCache.put(activeStoryId, storyUrl, extraction)
+                                        extracted = extraction
+                                        scope.launch {
+                                            app.readerExtractions.put(
+                                                storyId = activeStoryId,
+                                                url = storyUrl,
+                                                title = extraction.title,
+                                                contentHtml = extraction.contentHtml,
+                                                textContent = extraction.textContent,
+                                            )
+                                        }
+                                    },
+                                    onExtractionFailed = {
+                                        if (!showChrome) {
+                                            return@ArticleWebView
+                                        }
+                                        if (extracted != null) return@ArticleWebView
+                                        readerFailed = true
+                                        pendingSpeedReader = false
+                                        pendingReadAloud = false
+                                        Toast.makeText(context, R.string.reader_unavailable, Toast.LENGTH_SHORT).show()
+                                    },
+                                )
+                            }
+                        }
+                        if (readerMode) {
+                            WebArticlePlaceholder(
+                                story = story,
+                                pageBackground = pageBackground,
+                                topPad = readerTopPad.dp,
+                            )
+                        } else {
+                            ExternalArticleFallback(
+                                story = story,
+                                message = stringResource(R.string.reader_unavailable_external_summary),
+                                buttonLabel = stringResource(R.string.open_in_browser),
+                                topPad = readerTopPad.dp,
+                                onOpenExternally = { openExternally(context, story.url) },
+                            )
                         }
                     }
                 }
@@ -555,7 +561,6 @@ fun ArticleScreen(
             enableStoryPager &&
             linkedUrl == null &&
             !showSpeedReader &&
-            !showComments &&
             storyIds.isNotEmpty() &&
             activeStoryIndex >= 0 &&
             (effectivePreviousStoryId != null || effectiveNextStoryId != null)
@@ -576,7 +581,7 @@ fun ArticleScreen(
                     val adjacentStoryId = storyIds.getOrNull(page)
                     if (adjacentStoryId != null && adjacentStoryId != activeStoryId) {
                         activeStoryId = adjacentStoryId
-                        app.settings.markViewed(adjacentStoryId)
+                        scope.launch { app.settings.markViewed(adjacentStoryId) }
                         onOpenAdjacentStory(adjacentStoryId)
                     }
                 }
@@ -585,11 +590,10 @@ fun ArticleScreen(
             HorizontalPager(
                 state = pagerState,
                 key = { storyIds[it] },
-                beyondViewportPageCount = 2,
+                beyondViewportPageCount = 1,
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
             ) { page ->
                 val articleStoryId = storyIds[page]
-                val shouldKeepWebView = abs(page - activeStoryIndex) <= 1
                 ArticleScreen(
                     storyId = articleStoryId,
                     showBack = false,
@@ -599,7 +603,7 @@ fun ArticleScreen(
                     storyIds = storyIds,
                     showChrome = false,
                     enableStoryPager = false,
-                    allowWebView = shouldKeepWebView,
+                    allowWebView = articleStoryId == activeStoryId,
                     externalReadAloudBlockIndex = if (articleStoryId == activeStoryId) {
                         currentReadAloudBlockIndex
                     } else {
@@ -670,55 +674,12 @@ fun ArticleScreen(
                                         if (!isPdfArticle && !forceWebArticle) {
                                             DropdownMenuItem(
                                                 text = { Text(stringResource(R.string.appearance)) },
-                                                trailingIcon = { Icon(Icons.Filled.FormatSize, null) },
+                                                trailingIcon = { AppearanceGlyph() },
                                                 onClick = {
                                                     showReaderMenu = false
                                                     showAppearance = true
                                                 },
                                             )
-                                            if (selectedRendererOverride == null) {
-                                                DropdownMenuItem(
-                                                    text = {
-                                                        Text(
-                                                            stringResource(
-                                                                if (readerMode) {
-                                                                    R.string.web_view
-                                                                } else {
-                                                                    R.string.reader_view
-                                                                },
-                                                            ),
-                                                        )
-                                                    },
-                                                    trailingIcon = {
-                                                        if (readerMode) {
-                                                            Icon(Icons.Filled.Public, null)
-                                                        } else {
-                                                            Icon(Icons.AutoMirrored.Filled.Article, null)
-                                                        }
-                                                    },
-                                                    onClick = {
-                                                        showReaderMenu = false
-                                                        selectedRendererOverride = if (readerMode) {
-                                                            ArticleRendererOverride.WEB_PAGE
-                                                        } else {
-                                                            ArticleRendererOverride.NATIVE_READER
-                                                        }
-                                                        readerFailed = false
-                                                        readerShown = false
-                                                    },
-                                                )
-                                            } else {
-                                                DropdownMenuItem(
-                                                    text = { Text(stringResource(R.string.use_default_reader)) },
-                                                    trailingIcon = { Icon(Icons.AutoMirrored.Filled.Article, null) },
-                                                    onClick = {
-                                                        showReaderMenu = false
-                                                        selectedRendererOverride = null
-                                                        readerFailed = false
-                                                        readerShown = false
-                                                    },
-                                                )
-                                            }
                                             DropdownMenuItem(
                                                 text = { Text(stringResource(R.string.speed_reader)) },
                                                 onClick = {
@@ -748,26 +709,6 @@ fun ArticleScreen(
                                                         readerFailed = false
                                                         readerShown = false
                                                     }
-                                                },
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.compare_web_reader)) },
-                                                trailingIcon = { Icon(Icons.Filled.Public, null) },
-                                                onClick = {
-                                                    showReaderMenu = false
-                                                    selectedRendererOverride = ArticleRendererOverride.WEB_READER
-                                                    readerFailed = false
-                                                    readerShown = false
-                                                },
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.compare_native_reader)) },
-                                                trailingIcon = { Icon(Icons.AutoMirrored.Filled.Article, null) },
-                                                onClick = {
-                                                    showReaderMenu = false
-                                                    selectedRendererOverride = ArticleRendererOverride.NATIVE_READER
-                                                    readerFailed = false
-                                                    readerShown = false
                                                 },
                                             )
                                         }
@@ -869,8 +810,19 @@ fun ArticleScreen(
             if (showChrome && showSpeedReader) {
                 SpeedReaderOverlay(
                     words = speedReadWords,
-                    palette = palette,
-                    readerFont = readerFont,
+                    palette = readerPaletteFor(speedReaderTheme, darkTheme),
+                    readerFont = speedReaderFont,
+                    wordsPerMinute = speedReaderWordsPerMinute,
+                    currentTheme = speedReaderTheme,
+                    onWordsPerMinuteChange = { wpm ->
+                        scope.launch { app.settings.setSpeedReaderWordsPerMinute(wpm) }
+                    },
+                    onSelectTheme = { theme ->
+                        scope.launch { app.settings.setSpeedReaderTheme(theme) }
+                    },
+                    onSelectFont = { font ->
+                        scope.launch { app.settings.setSpeedReaderFont(font) }
+                    },
                     onDismiss = {
                         showSpeedReader = false
                         barVisible = true
@@ -1021,6 +973,105 @@ fun ReaderExtractionPreloader(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun WebArticlePlaceholder(
+    story: Story,
+    pageBackground: Int,
+    topPad: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
+) {
+    val host = hostOf(story.url) ?: story.url.orEmpty()
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(Color(pageBackground))
+            .padding(top = topPad),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            SourceAvatar(url = story.url, title = story.title, size = 56.dp)
+            Text(
+                text = story.title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (host.isNotBlank()) {
+                Text(
+                    text = host,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            LoadingIndicator(Modifier.padding(top = 8.dp))
+        }
+    }
+}
+
+@Composable
+private fun ExternalArticleFallback(
+    story: Story,
+    message: String,
+    buttonLabel: String,
+    topPad: androidx.compose.ui.unit.Dp,
+    onOpenExternally: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val host = hostOf(story.url) ?: story.url.orEmpty()
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+            .verticalScroll(rememberScrollState())
+            .padding(top = topPad)
+            .padding(horizontal = 32.dp, vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        SourceAvatar(url = story.url, title = story.title, size = 56.dp)
+        Text(
+            text = story.title,
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+        )
+        if (host.isNotBlank()) {
+            Text(
+                text = host,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Button(
+            onClick = onOpenExternally,
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(buttonLabel)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ArticleWebView(
     url: String,
@@ -1029,6 +1080,7 @@ private fun ArticleWebView(
     pageReady: Boolean,
     pageBackground: Int,
     contentTopPad: androidx.compose.ui.unit.Dp,
+    loadingStory: Story? = null,
     onPageReady: () -> Unit,
     onReaderShownChange: (Boolean) -> Unit,
     onScroll: (scrollY: Int) -> Unit,
@@ -1039,109 +1091,153 @@ private fun ArticleWebView(
     val holder = remember { WebViewHolder() }
     val latestOnScroll by androidx.compose.runtime.rememberUpdatedState(onScroll)
     val chromeBackground = MaterialTheme.colorScheme.surface
+    val contentKey = readerHtml.takeIf { readerMode } ?: url
+    var webViewVisible by remember(contentKey) { mutableStateOf(false) }
 
-    androidx.compose.ui.viewinterop.AndroidView(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(chromeBackground)
-            .padding(top = contentTopPad)
-            .background(Color(pageBackground)),
-        factory = { ctx ->
-            WebView(ctx).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
+    Box(Modifier.fillMaxSize().background(chromeBackground)) {
+        androidx.compose.ui.viewinterop.AndroidView(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = contentTopPad)
+                .background(Color(pageBackground)),
+            factory = { ctx ->
+                WebView(ctx).apply {
+                    holder.destroyed = false
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    )
+                    isSoundEffectsEnabled = false
+                    isHapticFeedbackEnabled = false
+                    setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                        latestOnScroll(scrollY)
+                    }
+                    val touchSlop = ViewConfiguration.get(ctx).scaledTouchSlop
+                    var downX = 0f
+                    var downY = 0f
+                    setOnTouchListener { view, event ->
+                        when (event.actionMasked) {
+                            MotionEvent.ACTION_DOWN -> {
+                                downX = event.x
+                                downY = event.y
+                                view.parent.requestDisallowInterceptTouchEvent(true)
+                            }
+                            MotionEvent.ACTION_MOVE -> {
+                                val dx = abs(event.x - downX)
+                                val dy = abs(event.y - downY)
+                                if (dx > touchSlop || dy > touchSlop) {
+                                    view.parent.requestDisallowInterceptTouchEvent(dy >= dx)
+                                }
+                            }
+                            MotionEvent.ACTION_UP,
+                            MotionEvent.ACTION_CANCEL,
+                            -> {
+                                view.parent.requestDisallowInterceptTouchEvent(false)
+                            }
+                        }
+                        false
+                    }
+                    // Match the reader background so there's no white flash while (re)loading.
+                    setBackgroundColor(pageBackground)
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.mediaPlaybackRequiresUserGesture = true
+                    settings.loadsImagesAutomatically = false
+                    settings.blockNetworkImage = true
+                    settings.javaScriptCanOpenWindowsAutomatically = false
+                    settings.setSupportMultipleWindows(false)
+                    settings.loadWithOverviewMode = true
+                    settings.useWideViewPort = true
+                    settings.setSupportZoom(false)
+                    setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, true)
+                    webChromeClient = WebChromeClient()
+                    webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView, finishedUrl: String?) {
+                            if (holder.destroyed || holder.webView !== view) return
+                            if (holder.showingReader) {
+                                view.postVisualStateCallback(
+                                    0L,
+                                    object : WebView.VisualStateCallback() {
+                                        override fun onComplete(requestId: Long) {
+                                            if (holder.destroyed || holder.webView !== view) return
+                                            webViewVisible = true
+                                            onReaderShownChange(true)
+                                        }
+                                    },
+                                )
+                            } else {
+                                view.evaluateJavascript(readabilityJs) {
+                                    if (holder.destroyed || holder.webView !== view) return@evaluateJavascript
+                                    onPageReady()
+                                    if (holder.destroyed || holder.webView !== view) return@evaluateJavascript
+                                    view.postVisualStateCallback(
+                                        0L,
+                                        object : WebView.VisualStateCallback() {
+                                            override fun onComplete(requestId: Long) {
+                                                if (holder.destroyed || holder.webView !== view) return
+                                                webViewVisible = true
+                                                onReaderShownChange(false)
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    holder.webView = this
+                }
+            },
+            update = { webView ->
+                when {
+                    readerMode && readerHtml != null -> {
+                        // Key on the HTML itself so a theme/appearance change (new HTML) reloads.
+                        if (holder.loadedKey != readerHtml) {
+                            webViewVisible = false
+                            webView.loadDataWithBaseURL(url, readerHtml, "text/html", "utf-8", null)
+                            holder.loadedKey = readerHtml
+                            holder.showingReader = true
+                        }
+                    }
+                    // web mode, or reader requested but not yet extracted: load the page either to
+                    // show it or to run Readability on its DOM.
+                    else -> {
+                        if (holder.loadedKey != url) {
+                            webViewVisible = false
+                            webView.loadUrl(url)
+                            holder.loadedKey = url
+                            holder.showingReader = false
+                        }
+                    }
+                }
+            },
+        )
+
+        if (!webViewVisible) {
+            if (loadingStory != null) {
+                WebArticlePlaceholder(
+                    story = loadingStory,
+                    pageBackground = pageBackground,
+                    topPad = contentTopPad,
                 )
-                isSoundEffectsEnabled = false
-                isHapticFeedbackEnabled = false
-                setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                    latestOnScroll(scrollY)
-                }
-                val touchSlop = ViewConfiguration.get(ctx).scaledTouchSlop
-                var downX = 0f
-                var downY = 0f
-                setOnTouchListener { view, event ->
-                    when (event.actionMasked) {
-                        MotionEvent.ACTION_DOWN -> {
-                            downX = event.x
-                            downY = event.y
-                            view.parent.requestDisallowInterceptTouchEvent(true)
-                        }
-                        MotionEvent.ACTION_MOVE -> {
-                            val dx = abs(event.x - downX)
-                            val dy = abs(event.y - downY)
-                            if (dx > touchSlop || dy > touchSlop) {
-                                view.parent.requestDisallowInterceptTouchEvent(dy >= dx)
-                            }
-                        }
-                        MotionEvent.ACTION_UP,
-                        MotionEvent.ACTION_CANCEL,
-                        -> {
-                            view.parent.requestDisallowInterceptTouchEvent(false)
-                        }
-                    }
-                    false
-                }
-                // Match the reader background so there's no white flash while (re)loading.
-                setBackgroundColor(pageBackground)
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.mediaPlaybackRequiresUserGesture = false
-                settings.loadWithOverviewMode = true
-                settings.useWideViewPort = true
-                settings.setSupportZoom(false)
-                webChromeClient = WebChromeClient()
-                webViewClient = object : WebViewClient() {
-                    override fun onPageFinished(view: WebView, finishedUrl: String?) {
-                        if (holder.showingReader) {
-                            // Lift the cover only once the reader HTML is actually ready to
-                            // draw — postVisualStateCallback fires on the first paintable frame,
-                            // avoiding a flash of the underlying raw page.
-                            view.postVisualStateCallback(
-                                0L,
-                                object : WebView.VisualStateCallback() {
-                                    override fun onComplete(requestId: Long) = onReaderShownChange(true)
-                                },
-                            )
-                        } else {
-                            // The raw page finished: make Readability available and extract.
-                            view.evaluateJavascript(readabilityJs) {
-                                onPageReady()
-                            }
-                            onReaderShownChange(false)
-                        }
-                    }
-                }
-                holder.webView = this
-            }
-        },
-        update = { webView ->
-            when {
-                readerMode && readerHtml != null -> {
-                    // Key on the HTML itself so a theme/appearance change (new HTML) reloads.
-                    if (holder.loadedKey != readerHtml) {
-                        webView.loadDataWithBaseURL(url, readerHtml, "text/html", "utf-8", null)
-                        holder.loadedKey = readerHtml
-                        holder.showingReader = true
-                    }
-                }
-                // web mode, or reader requested but not yet extracted: load the page either to
-                // show it or to run Readability on its DOM.
-                else -> {
-                    if (holder.loadedKey != url) {
-                        webView.loadUrl(url)
-                        holder.loadedKey = url
-                        holder.showingReader = false
-                    }
+            } else {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color(pageBackground))
+                        .padding(top = contentTopPad),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    LoadingIndicator()
                 }
             }
-        },
-    )
+        }
+    }
 
     LaunchedEffect(readerMode, readerHtml, pageReady) {
         if (readerMode && readerHtml == null && pageReady) {
             val webView = holder.webView ?: return@LaunchedEffect
             webView.evaluateJavascript(EXTRACT_JS) { raw ->
+                if (holder.destroyed || holder.webView !== webView) return@evaluateJavascript
                 val parsed = parseExtraction(raw)
                 if (parsed != null) onExtracted(parsed) else onExtractionFailed()
             }
@@ -1150,7 +1246,11 @@ private fun ArticleWebView(
 
     DisposableEffect(holder) {
         onDispose {
+            holder.destroyed = true
             holder.webView?.apply {
+                webViewClient = WebViewClient()
+                webChromeClient = null
+                onPause()
                 stopLoading()
                 loadUrl("about:blank")
                 removeAllViews()
@@ -1165,6 +1265,7 @@ private class WebViewHolder {
     var webView: WebView? = null
     var loadedKey: String? = null
     var showingReader = false
+    var destroyed = false
 }
 
 private data class ReaderExtraction(
@@ -1339,6 +1440,7 @@ private fun NativeReaderArticle(
     val codeBg = remember(palette) { Color(android.graphics.Color.parseColor(palette.codeBg)) }
     val readerFontFamily = readerFont.fontFamily
     val latestOnScroll by androidx.compose.runtime.rememberUpdatedState(onScroll)
+    var expandedImage by remember(article) { mutableStateOf<ReaderImagePreview?>(null) }
 
     LaunchedEffect(listState) {
         snapshotFlow { listState.readerScrollKey() }
@@ -1405,12 +1507,25 @@ private fun NativeReaderArticle(
                         codeBg = codeBg,
                         readerFontFamily = readerFontFamily,
                         onOpenLink = onOpenLink,
+                        onOpenImage = { src, alt -> expandedImage = ReaderImagePreview(src, alt) },
                     )
                 }
             }
         }
     }
+    expandedImage?.let { image ->
+        ZoomableImageOverlay(
+            image = image,
+            background = background,
+            onDismiss = { expandedImage = null },
+        )
+    }
 }
+
+private data class ReaderImagePreview(
+    val src: String,
+    val alt: String?,
+)
 
 private fun LazyListState.readerScrollKey(): Int =
     firstVisibleItemIndex * 100_000 + firstVisibleItemScrollOffset
@@ -1457,7 +1572,9 @@ private fun ReadAloudControls(
     var isPlaying by rememberSaveable(segments) { mutableStateOf(false) }
     var currentIndex by rememberSaveable(segments) { mutableIntStateOf(0) }
     var showPlayerSheet by rememberSaveable { mutableStateOf(false) }
-    var draftSpeechRate by rememberSaveable(speechRate) { mutableFloatStateOf(speechRate) }
+    var draftSpeechRate by rememberSaveable(speechRate) {
+        mutableFloatStateOf(speechRate.nearestReadAloudSpeechRate())
+    }
     var segmentStartElapsedMillis by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     var availableVoices by remember { mutableStateOf<List<Voice>>(emptyList()) }
     var voiceMenuExpanded by rememberSaveable { mutableStateOf(false) }
@@ -2113,7 +2230,7 @@ private fun ReadAloudControls(
                 )
                 Slider(
                     value = draftSpeechRate,
-                    onValueChange = { value -> draftSpeechRate = value },
+                    onValueChange = { value -> draftSpeechRate = value.nearestReadAloudSpeechRate() },
                     onValueChangeFinished = {
                         onSpeechRateChange(draftSpeechRate)
                         val engine = tts
@@ -2122,8 +2239,8 @@ private fun ReadAloudControls(
                             if (isPlaying) speakCurrentSegment(engine)
                         }
                     },
-                    valueRange = 0.7f..1.4f,
-                    steps = 6,
+                    valueRange = ReadAloudSpeechRates.first()..ReadAloudSpeechRates.last(),
+                    steps = ReadAloudSpeechRates.size - 2,
                 )
 
                 Box {
@@ -2275,6 +2392,10 @@ private const val ReadAloudNotificationChannelId = "read_aloud"
 private const val ReadAloudNotificationId = 9001
 private const val ReadAloudBaseWordsPerMinute = 180f
 private const val ReadAloudMinimumSegmentMillis = 900L
+private val ReadAloudSpeechRates = listOf(0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
+
+private fun Float.nearestReadAloudSpeechRate(): Float =
+    ReadAloudSpeechRates.minBy { kotlin.math.abs(it - this) }
 
 private fun Voice.readAloudLabel(): String =
     locale.getDisplayName(Locale.getDefault()).ifBlank { name }
@@ -2354,14 +2475,21 @@ private fun String.chunkForTextToSpeech(): List<String> {
     return chunked(maxLength).map { it.trim() }.filter { it.isNotEmpty() }
 }
 
-private const val SpeedReaderWordsPerMinute = 300
 private const val SpeedReaderInitialPauseMillis = 300L
+private const val SpeedReaderMinWordsPerMinute = 150
+private const val SpeedReaderMaxWordsPerMinute = 800
+private const val SpeedReaderWordsPerMinuteStep = 25
 
 @Composable
 private fun SpeedReaderOverlay(
     words: List<String>,
     palette: ReaderPalette,
     readerFont: ReaderFont,
+    wordsPerMinute: Int,
+    currentTheme: ReaderTheme,
+    onWordsPerMinuteChange: (Int) -> Unit,
+    onSelectTheme: (ReaderTheme) -> Unit,
+    onSelectFont: (ReaderFont) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -2370,6 +2498,15 @@ private fun SpeedReaderOverlay(
     val muted = remember(palette) { Color(android.graphics.Color.parseColor(palette.muted)) }
     val readerFontFamily = readerFont.fontFamily
     var wordIndex by rememberSaveable(words) { mutableIntStateOf(0) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    val latestWordsPerMinute by androidx.compose.runtime.rememberUpdatedState(
+        wordsPerMinute.coerceIn(SpeedReaderMinWordsPerMinute, SpeedReaderMaxWordsPerMinute),
+    )
+    val progress = if (words.isEmpty()) {
+        0f
+    } else {
+        ((wordIndex + 1).coerceAtMost(words.size).toFloat() / words.size.toFloat()).coerceIn(0f, 1f)
+    }
     val window = LocalActivity.current?.window
 
     DisposableEffect(window) {
@@ -2381,7 +2518,7 @@ private fun SpeedReaderOverlay(
         wordIndex = 0
         delay(SpeedReaderInitialPauseMillis)
         while (wordIndex < words.lastIndex) {
-            delay(SpeedReaderWordDelayMillis)
+            delay(60_000L / latestWordsPerMinute.coerceAtLeast(1))
             wordIndex += 1
         }
     }
@@ -2389,9 +2526,20 @@ private fun SpeedReaderOverlay(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(background)
-            .pointerInput(words) { detectTapGestures { onDismiss() } },
+            .background(background),
     ) {
+        Row(
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 24.dp, end = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = { showSettings = true }) {
+                Icon(
+                    Icons.Filled.Settings,
+                    contentDescription = stringResource(R.string.speed_reader_settings),
+                    tint = muted,
+                )
+            }
+        }
         val currentWord = words.getOrNull(wordIndex).orEmpty()
         Text(
             text = currentWord,
@@ -2405,16 +2553,141 @@ private fun SpeedReaderOverlay(
             textAlign = TextAlign.Center,
             modifier = Modifier.align(Alignment.Center).padding(horizontal = 28.dp),
         )
-        Text(
-            text = "${(wordIndex + 1).coerceAtMost(words.size)} / ${words.size}",
-            style = MaterialTheme.typography.labelMedium.copy(fontFamily = readerFontFamily),
-            color = muted,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(RoundedCornerShape(50.dp)),
+            color = foreground.copy(alpha = 0.58f),
+            trackColor = muted.copy(alpha = 0.24f),
+        )
+    }
+
+    if (showSettings) {
+        SpeedReaderSettingsSheet(
+            wordsPerMinute = wordsPerMinute,
+            currentTheme = currentTheme,
+            currentFont = readerFont,
+            onWordsPerMinuteChange = onWordsPerMinuteChange,
+            onSelectTheme = onSelectTheme,
+            onSelectFont = onSelectFont,
+            onDismiss = { showSettings = false },
         )
     }
 }
 
-private const val SpeedReaderWordDelayMillis = 60_000L / SpeedReaderWordsPerMinute
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SpeedReaderSettingsSheet(
+    wordsPerMinute: Int,
+    currentTheme: ReaderTheme,
+    currentFont: ReaderFont,
+    onWordsPerMinuteChange: (Int) -> Unit,
+    onSelectTheme: (ReaderTheme) -> Unit,
+    onSelectFont: (ReaderFont) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var sliderValue by remember(wordsPerMinute) { mutableFloatStateOf(wordsPerMinute.toFloat()) }
+    val snappedWordsPerMinute = sliderValue
+        .roundToNearest(SpeedReaderWordsPerMinuteStep)
+        .toInt()
+        .coerceIn(SpeedReaderMinWordsPerMinute, SpeedReaderMaxWordsPerMinute)
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+            Text(
+                text = stringResource(R.string.speed_reader_settings),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            Text(
+                text = stringResource(R.string.speed_reader_speed_value, snappedWordsPerMinute),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Slider(
+                value = sliderValue,
+                onValueChange = { value ->
+                    sliderValue = value
+                    onWordsPerMinuteChange(value.roundToNearest(SpeedReaderWordsPerMinuteStep).toInt())
+                },
+                valueRange = SpeedReaderMinWordsPerMinute.toFloat()..SpeedReaderMaxWordsPerMinute.toFloat(),
+                steps = ((SpeedReaderMaxWordsPerMinute - SpeedReaderMinWordsPerMinute) / SpeedReaderWordsPerMinuteStep) - 1,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = stringResource(R.string.speed_reader_slow),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(R.string.speed_reader_fast),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = stringResource(R.string.speed_reader_colors),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 24.dp, bottom = 12.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                listOf(ReaderTheme.SYSTEM, ReaderTheme.LIGHT, ReaderTheme.SEPIA, ReaderTheme.DARK)
+                    .forEach { theme ->
+                        ThemeSwatch(
+                            fill = swatchBrush(theme),
+                            label = readerThemeLabel(theme),
+                            selected = currentTheme == theme,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onSelectTheme(theme) },
+                        )
+                    }
+            }
+            Text(
+                text = stringResource(R.string.reader_font),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ReaderFont.entries.forEach { font ->
+                    FontChoiceRow(
+                        font = font,
+                        selected = currentFont == font,
+                        onClick = { onSelectFont(font) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+private fun Float.roundToNearest(step: Int): Float =
+    (kotlin.math.round(this / step.toFloat()) * step).coerceIn(
+        SpeedReaderMinWordsPerMinute.toFloat(),
+        SpeedReaderMaxWordsPerMinute.toFloat(),
+    )
+
+@Composable
+private fun AppearanceGlyph(modifier: Modifier = Modifier) {
+    Text(
+        text = "Aa",
+        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier,
+    )
+}
 
 private fun String.speedReadWords(): List<String> =
     this
@@ -2446,6 +2719,7 @@ private fun ReaderBlockView(
     codeBg: Color,
     readerFontFamily: FontFamily,
     onOpenLink: (String) -> Unit,
+    onOpenImage: (src: String, alt: String?) -> Unit,
 ) {
     when (block) {
         is ReaderBlock.Heading -> ReaderText(
@@ -2492,6 +2766,7 @@ private fun ReaderBlockView(
                         codeBg = codeBg,
                         readerFontFamily = readerFontFamily,
                         onOpenLink = onOpenLink,
+                        onOpenImage = onOpenImage,
                     )
                 }
             }
@@ -2534,9 +2809,11 @@ private fun ReaderBlockView(
             contentScale = ContentScale.FillWidth,
             modifier = Modifier
                 .padding(bottom = 28.dp)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onOpenImage(block.src, block.alt) },
         )
-        is ReaderBlock.Figure -> ReaderFigure(block, muted, link, codeBg, readerFontFamily, onOpenLink)
+        is ReaderBlock.Figure -> ReaderFigure(block, muted, link, codeBg, readerFontFamily, onOpenLink, onOpenImage)
         ReaderBlock.Divider -> HorizontalDivider(
             color = rule,
             modifier = Modifier.padding(top = 10.dp, bottom = 32.dp),
@@ -2552,6 +2829,7 @@ private fun ReaderFigure(
     codeBg: Color,
     readerFontFamily: FontFamily,
     onOpenLink: (String) -> Unit,
+    onOpenImage: (src: String, alt: String?) -> Unit,
 ) {
     Column(Modifier.padding(top = 6.dp, bottom = 28.dp)) {
         figure.images.forEachIndexed { index, image ->
@@ -2562,7 +2840,9 @@ private fun ReaderFigure(
                 modifier = Modifier
                     .padding(bottom = if (index == figure.images.lastIndex) 0.dp else 12.dp)
                     .fillMaxWidth()
-                    .heightIn(min = 1.dp),
+                    .heightIn(min = 1.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onOpenImage(image.src, image.alt) },
             )
         }
         figure.caption?.let { caption ->
@@ -2578,6 +2858,69 @@ private fun ReaderFigure(
                 onOpenLink = onOpenLink,
             )
         }
+    }
+}
+
+@Composable
+private fun ZoomableImageOverlay(
+    image: ReaderImagePreview,
+    background: Color,
+    onDismiss: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val scale = remember(image.src) { Animatable(1f) }
+    var offsetX by remember(image.src) { mutableFloatStateOf(0f) }
+    var offsetY by remember(image.src) { mutableFloatStateOf(0f) }
+
+    BackHandler(onBack = onDismiss)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(background.copy(alpha = 0.98f))
+            .pointerInput(image.src) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    val nextScale = (scale.value * zoom).coerceIn(1f, 5f)
+                    scope.launch { scale.snapTo(nextScale) }
+                    if (nextScale == 1f) {
+                        offsetX = 0f
+                        offsetY = 0f
+                    } else {
+                        offsetX += pan.x
+                        offsetY += pan.y
+                    }
+                }
+            }
+            .pointerInput(image.src) {
+                detectTapGestures(
+                    onDoubleTap = {
+                        offsetX = 0f
+                        offsetY = 0f
+                        scope.launch {
+                            scale.animateTo(
+                                targetValue = if (scale.value > 1f) 1f else 2.5f,
+                                animationSpec = tween(180),
+                            )
+                        }
+                    },
+                    onTap = { onDismiss() },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = image.src,
+            contentDescription = image.alt,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .graphicsLayer {
+                    scaleX = scale.value
+                    scaleY = scale.value
+                    translationX = offsetX
+                    translationY = offsetY
+                },
+        )
     }
 }
 
@@ -3116,7 +3459,7 @@ private fun AppearanceSheet(
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 // System isn't offered explicitly: it's the default until a choice is made, then
                 // the chosen theme sticks.
-                listOf(ReaderTheme.LIGHT, ReaderTheme.SEPIA, ReaderTheme.DARK)
+                listOf(ReaderTheme.SYSTEM, ReaderTheme.LIGHT, ReaderTheme.SEPIA, ReaderTheme.DARK)
                     .forEach { theme ->
                         ThemeSwatch(
                             fill = swatchBrush(theme),
@@ -3230,7 +3573,12 @@ private fun swatchBrush(theme: ReaderTheme): Brush = when (theme) {
     ReaderTheme.LIGHT -> SolidColor(Color(0xFFFDFDFB))
     ReaderTheme.SEPIA -> SolidColor(Color(0xFFF4ECD8))
     ReaderTheme.DARK -> SolidColor(Color(0xFF16161A))
-    ReaderTheme.SYSTEM -> Brush.horizontalGradient(listOf(Color(0xFFFDFDFB), Color(0xFF16161A)))
+    ReaderTheme.SYSTEM -> Brush.horizontalGradient(
+        0f to Color(0xFFFDFDFB),
+        0.5f to Color(0xFFFDFDFB),
+        0.5f to Color(0xFF16161A),
+        1f to Color(0xFF16161A),
+    )
 }
 
 @Composable

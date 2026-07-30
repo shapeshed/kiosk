@@ -8,6 +8,15 @@ android {
     namespace = 'com.shapeshed.kiosk'
     compileSdk 37
 
+    def releaseKeystoreFile = System.getenv("KIOSK_KEYSTORE_FILE")
+    def releaseKeystorePassword = System.getenv("KIOSK_KEYSTORE_PASSWORD")
+    def releaseKeyAlias = System.getenv("KIOSK_KEY_ALIAS")
+    def releaseKeyPassword = System.getenv("KIOSK_KEY_PASSWORD")
+    def hasReleaseSigning = releaseKeystoreFile &&
+        releaseKeystorePassword &&
+        releaseKeyAlias &&
+        releaseKeyPassword
+
     defaultConfig {
         applicationId "com.shapeshed.kiosk"
         minSdk 26
@@ -16,8 +25,22 @@ android {
         versionName "0.1.0"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseKeystoreFile)
+                storePassword releaseKeystorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled true
             shrinkResources = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

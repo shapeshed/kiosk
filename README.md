@@ -1,51 +1,50 @@
 # Kiosk
 
-Kiosk is a calm Hacker News reader for Android.
+A deliberately boring Hacker News reader for Android.
 
-It shows the Hacker News feeds and their discussions, searches historical stories, and opens
-articles in a built-in, distraction-free reader. That's it — no accounts, no analytics, no tracking
-SDKs, no sexy features. Boring, stable tech chosen to last.
-
-## Stack
-
-- Kotlin + Jetpack Compose, **Material 3 Expressive** (dynamic colour on Android 12+, HN-orange
-  otherwise)
-- The official read-only [Hacker News API](https://github.com/HackerNews/API) over OkHttp — no
-  key, no auth
-- The unauthenticated [Algolia HN Search API](https://hn.algolia.com/api) for historical search
-- Adaptive list-detail layout (list on phones, list+article on tablets/foldables), plain
-  `ViewModel`s; no DI framework
-- `minSdk 26`, Java/Kotlin 17
+Kiosk is built around reading, not browsing. It shows Hacker News feeds, searches historical
+stories, extracts readable articles, warms likely next articles, and keeps comments close at hand.
+No accounts. No ads. No analytics. No tracking SDKs.
 
 ## Features
 
-- Swipe (or tap) between all six HN feeds — Top, New, Best, Ask, Show, Jobs — with the last-viewed
-  feed remembered
-- Infinite scroll, pull-to-refresh, and read/unread styling
-- In-app reader (vendored Mozilla Readability.js) with a Web ⇄ Reader toggle and light/sepia/dark
-  themes, plus comments in a summoned bottom sheet
+- Browse Top, New, Best, Ask, Show, and Jobs.
+- Search historical Hacker News stories.
+- Read articles in a native, distraction-free reader.
+- Swipe between stories, open comments quickly, and keep read/unread state.
+- Use reader themes, fonts, Speed Reader, Read Aloud, and zoomable article images.
+- Open PDFs, X/Twitter, YouTube, and external links in the default app or browser.
 
-## Structure
+## Funding
 
-```
-app/src/main/java/com/shapeshed/kiosk/
-  KioskApp.kt            Application; owns the OkHttp client (+ HTTP cache) and repository
-  MainActivity.kt        Splash, edge-to-edge, theme, entry point
-  data/                  Models, HN API client, repository, pure parse/format helpers
-  ui/                    Stories, Article, and Comments screens and ViewModels, theme, reader HTML
-```
+Enjoying Kiosk? You can help fund the project by buying me a coffee or sending
+a small contribution through Ko-fi or PayPal. Funding is optional, but it helps
+with the time and costs involved in keeping Kiosk maintained.
 
-The parsing, thread-flattening, and text helpers in `data/` are pure and covered by unit tests.
+<p>
+  <a href="https://buymeacoffee.com/shapeshed"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="45"></a>
+  &nbsp;&nbsp;
+  <a href="https://ko-fi.com/shapeshed"><img src="https://storage.ko-fi.com/cdn/brandasset/v2/support_me_on_kofi_beige.png" alt="Support Kiosk on Ko-fi" height="45"></a>
+  &nbsp;&nbsp;
+  <a href="https://www.paypal.com/donate/?hosted_button_id=MZVB3E2RYYWV8"><img src="docs/badges/paypal-donate.png" alt="Donate with PayPal" height="45"></a>
+</p>
 
-## Build
+## Development
 
-```
-./gradlew :app:assembleDebug        # build
-./gradlew :app:testDebugUnitTest    # unit tests
-./gradlew :app:installDebug         # install to a connected device
-./gradlew quality                   # compile + lint + tests
-```
+Developer documentation lives in [DEVELOPERS.md](DEVELOPERS.md). See
+[CONTRIBUTING.md](.github/CONTRIBUTING.md) for how to propose changes, and
+[SECURITY.md](.github/SECURITY.md) to report a vulnerability privately.
 
-## Not here yet
+## Releases
 
-Offline caching (Room) and a settings screen are deliberately left for later.
+Release notes are tracked in [CHANGELOG.md](CHANGELOG.md). CI builds nightly artifacts and
+tag-based release artifacts, but does not publish to Google Play.
+
+## Privacy
+
+Kiosk does not include advertising, analytics, tracking SDKs, Firebase, Crashlytics, Google Play
+Services, or user accounts. See [PRIVACY.md](PRIVACY.md) for details.
+
+## License
+
+Kiosk is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).

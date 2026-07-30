@@ -1,0 +1,101 @@
+name: GitHub Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Decode release keystore
+        env:
+          KIOSK_KEYSTORE_BASE64: ${{ secrets.KIOSK_KEYSTORE_BASE64 }}
+          KIOSK_KEYSTORE_PASSWORD: ${{ secrets.KIOSK_KEYSTORE_PASSWORD }}
+          KIOSK_KEY_ALIAS: ${{ secrets.KIOSK_KEY_ALIAS }}
+          KIOSK_KEY_PASSWORD: ${{ secrets.KIOSK_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KIOSK_KEYSTORE_BASE64" ] ||
+             [ -z "$KIOSK_KEYSTORE_PASSWORD" ] ||
+             [ -z "$KIOSK_KEY_ALIAS" ] ||
+             [ -z "$KIOSK_KEY_PASSWORD" ]; then
+            echo "All Kiosk signing secrets are required for signed releases." >&2
+            exit 1
+          fi
+          printf '%s' "$KIOSK_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/kiosk-release.jks"
+
+      - name: Run release checks
+        env:
+          KIOSK_KEYSTORE_FILE: ${{ runner.temp }}/kiosk-release.jks
+          KIOSK_KEYSTORE_PASSWORD: ${{ secrets.KIOSK_KEYSTORE_PASSWORD }}
+          KIOSK_KEY_ALIAS: ${{ secrets.KIOSK_KEY_ALIAS }}
+          KIOSK_KEY_PASSWORD: ${{ secrets.KIOSK_KEY_PASSWORD }}
+        run: ./gradlew quality :app:assembleRelease :app:bundleRelease
+
+      - name: Prepare release assets
+        run: |
+          set -eu
+          tag="${GITHUB_REF_NAME:-manual}"
+          signed_apk="app/build/outputs/apk/release/app-release.apk"
+          signed_aab="app/build/outputs/bundle/release/app-release.aab"
+          if [ ! -f "$signed_apk" ]; then
+            echo "Expected signed APK at $signed_apk" >&2
+            exit 1
+          fi
+          if [ ! -f "$signed_aab" ]; then
+            echo "Expected signed AAB at $signed_aab" >&2
+            exit 1
+          fi
+          mkdir -p app/build/release-assets app/build/play-assets
+          cp "$signed_apk" "app/build/release-assets/kiosk-${tag}.apk"
+          cp "$signed_aab" "app/build/play-assets/kiosk-${tag}.aab"
+          sha256sum "app/build/release-assets/kiosk-${tag}.apk" > "app/build/release-assets/kiosk-${tag}.apk.sha256"
+          sha256sum "app/build/play-assets/kiosk-${tag}.aab" > "app/build/play-assets/kiosk-${tag}.aab.sha256"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiosk-release-apk
+          path: app/build/release-assets/*
+          if-no-files-found: error
+
+      - name: Upload Play artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiosk-play-aab
+          path: app/build/play-assets/*
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/build/release-assets/*
+            app/build/play-assets/*
+          overwrite_files: true
+          draft: true
+          generate_release_notes: true

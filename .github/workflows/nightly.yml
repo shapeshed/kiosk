@@ -1,0 +1,105 @@
+name: Nightly Build
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly-build
+  cancel-in-progress: true
+
+jobs:
+  nightly:
+    name: Build and publish nightly APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.repository_owner == 'shapeshed'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check for commits in the last 24 hours
+        id: check
+        run: |
+          if [ -z "$(git log --since='24 hours ago' -1)" ]; then
+            echo "No commits in the last 24 hours; skipping nightly build."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        if: steps.check.outputs.skip != 'true'
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle wrapper executable
+        if: steps.check.outputs.skip != 'true'
+        run: chmod +x ./gradlew
+
+      - name: Decode release keystore
+        if: steps.check.outputs.skip != 'true'
+        env:
+          KIOSK_KEYSTORE_BASE64: ${{ secrets.KIOSK_KEYSTORE_BASE64 }}
+          KIOSK_KEYSTORE_PASSWORD: ${{ secrets.KIOSK_KEYSTORE_PASSWORD }}
+          KIOSK_KEY_ALIAS: ${{ secrets.KIOSK_KEY_ALIAS }}
+          KIOSK_KEY_PASSWORD: ${{ secrets.KIOSK_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KIOSK_KEYSTORE_BASE64" ] ||
+             [ -z "$KIOSK_KEYSTORE_PASSWORD" ] ||
+             [ -z "$KIOSK_KEY_ALIAS" ] ||
+             [ -z "$KIOSK_KEY_PASSWORD" ]; then
+            echo "All Kiosk signing secrets are required for nightly builds." >&2
+            exit 1
+          fi
+          printf '%s' "$KIOSK_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/kiosk-release.jks"
+
+      - name: Build signed release APK
+        if: steps.check.outputs.skip != 'true'
+        env:
+          KIOSK_KEYSTORE_FILE: ${{ runner.temp }}/kiosk-release.jks
+          KIOSK_KEYSTORE_PASSWORD: ${{ secrets.KIOSK_KEYSTORE_PASSWORD }}
+          KIOSK_KEY_ALIAS: ${{ secrets.KIOSK_KEY_ALIAS }}
+          KIOSK_KEY_PASSWORD: ${{ secrets.KIOSK_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      - name: Rename APK
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          set -eu
+          apk="app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$apk" ]; then
+            echo "Expected signed APK at $apk" >&2
+            exit 1
+          fi
+          short_sha=$(echo "${{ github.sha }}" | cut -c1-7)
+          name="kiosk-nightly-${short_sha}.apk"
+          mv "$apk" "./$name"
+          sha256sum "./$name" > "./$name.sha256"
+          echo "APK_NAME=$name" >> "$GITHUB_ENV"
+
+      - name: Replace nightly release
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          if gh release view nightly --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete nightly --repo "$GITHUB_REPOSITORY" -y --cleanup-tag
+          fi
+          gh release create nightly "./$APK_NAME" "./$APK_NAME.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --prerelease \
+            --title "Kiosk Nightly" \
+            --notes "Automated build from \`main\` @ ${{ github.sha }}. Signed with the same key as tagged releases, so it installs cleanly as an update over a previous nightly. For testing only — this tag is force-updated on every nightly build."

@@ -6,3 +6,6 @@ local.properties
 *.iml
 captures/
 .kotlin/
+*.jks
+*.keystore
+*.p12

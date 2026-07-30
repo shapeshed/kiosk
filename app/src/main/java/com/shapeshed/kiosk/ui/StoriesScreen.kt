@@ -30,7 +30,6 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.ExpandedFullScreenContainedSearchBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -57,6 +56,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -96,10 +96,8 @@ private val FEEDS = Feed.entries
 @Composable
 fun StoriesScreen(
     selectedStoryId: Long?,
-    settingsSelected: Boolean,
     onFeedStoriesChange: (Feed, List<Long>) -> Unit,
     onOpenStory: (Feed?, Long, ArticleRendererOverride?) -> Unit,
-    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val app = LocalContext.current.applicationContext as KioskApp
@@ -166,18 +164,6 @@ fun StoriesScreen(
                 if (isSearchExpanded && searchQueryText.isNotEmpty()) {
                     IconButton(onClick = { textFieldState.setTextAndPlaceCursorAtEnd("") }) {
                         Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.clear_search))
-                    }
-                } else if (!isSearchExpanded) {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(
-                            Icons.Rounded.Settings,
-                            contentDescription = stringResource(R.string.settings),
-                            tint = if (settingsSelected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
                     }
                 }
             },
@@ -417,10 +403,6 @@ private fun FeedPane(
                         },
                     )
                 }
-                ReaderExtractionPreloader(
-                    stories = current.data,
-                    modifier = Modifier.align(Alignment.BottomEnd),
-                )
             }
         }
     }
@@ -437,6 +419,16 @@ private fun StoryList(
     onOpenStory: (Long) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    var warmStartIndex by remember(stories) { mutableIntStateOf(0) }
+    LaunchedEffect(listState, stories) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.firstOrNull()?.index ?: 0 }
+            .collect { firstVisible ->
+                warmStartIndex = firstVisible.coerceIn(0, stories.lastIndex.coerceAtLeast(0))
+            }
+    }
+    val warmStories = remember(stories, warmStartIndex) {
+        stories.readerWarmWindow(startIndex = warmStartIndex, before = 2, after = 12)
+    }
     // Load the next page once the last few rows come into view.
     val nearEnd by remember {
         derivedStateOf {
@@ -447,29 +439,47 @@ private fun StoryList(
     }
     LaunchedEffect(nearEnd) { if (nearEnd) onLoadMore() }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        itemsIndexed(stories, key = { _, story -> story.id }) { _, story ->
-            StoryCard(
-                story = story,
-                selected = story.id == selectedStoryId,
-                viewed = story.id in viewedIds,
-                shape = RoundedCornerShape(20.dp),
-                onClick = { onOpenStory(story.id) },
-            )
-        }
-        if (loadingMore) {
-            item(key = "loading-more") {
-                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                    LoadingIndicator()
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            itemsIndexed(stories, key = { _, story -> story.id }) { _, story ->
+                StoryCard(
+                    story = story,
+                    selected = story.id == selectedStoryId,
+                    viewed = story.id in viewedIds,
+                    shape = RoundedCornerShape(20.dp),
+                    onClick = { onOpenStory(story.id) },
+                )
+            }
+            if (loadingMore) {
+                item(key = "loading-more") {
+                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        LoadingIndicator()
+                    }
                 }
             }
         }
+        ReaderExtractionPreloader(
+            stories = warmStories,
+            modifier = Modifier.align(Alignment.BottomEnd),
+            limit = warmStories.size,
+        )
     }
+}
+
+private fun List<Story>.readerWarmWindow(
+    startIndex: Int,
+    before: Int,
+    after: Int,
+): List<Story> {
+    if (isEmpty()) return emptyList()
+    val start = (startIndex - before).coerceAtLeast(0)
+    val endExclusive = (startIndex + after + 1).coerceAtMost(size)
+    return subList(start, endExclusive)
 }
 
 @Composable

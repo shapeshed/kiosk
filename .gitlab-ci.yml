@@ -1,0 +1,63 @@
+image: ghcr.io/cirruslabs/android-sdk:37
+
+stages:
+  - verify
+  - build
+
+variables:
+  GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle"
+  ANDROID_SDK_ROOT: "/opt/android-sdk-linux"
+
+before_script:
+  - chmod +x ./gradlew
+
+cache:
+  key: "$CI_PROJECT_NAME-gradle"
+  paths:
+    - .gradle/caches/
+    - .gradle/wrapper/
+
+quality:
+  stage: verify
+  script:
+    - ./gradlew --no-daemon quality
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+
+nightly:
+  stage: build
+  script:
+    - . .gitlab/ci/setup-signing.sh
+    - ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease
+  artifacts:
+    name: "kiosk-nightly-$CI_COMMIT_SHORT_SHA"
+    when: always
+    expire_in: 14 days
+    paths:
+      - app/build/outputs/apk/debug/*.apk
+      - app/build/outputs/apk/release/*.apk
+      - app/build/outputs/mapping/release/
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: manual
+      allow_failure: true
+
+tag-build:
+  stage: build
+  script:
+    - . .gitlab/ci/setup-signing.sh
+    - ./gradlew --no-daemon quality :app:assembleRelease :app:bundleRelease
+  artifacts:
+    name: "kiosk-$CI_COMMIT_TAG"
+    when: always
+    expire_in: 90 days
+    paths:
+      - app/build/outputs/apk/release/*.apk
+      - app/build/outputs/bundle/release/*.aab
+      - app/build/outputs/mapping/release/
+      - app/build/reports/
+  rules:
+    - if: '$CI_COMMIT_TAG'
