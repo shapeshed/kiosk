@@ -6,6 +6,10 @@ Kiosk is built around reading, not browsing. It shows Hacker News feeds, searche
 stories, extracts readable articles, warms likely next articles, and keeps comments close at hand.
 No accounts. No ads. No analytics. No tracking SDKs.
 
+## Install
+
+Release APKs are available from [GitHub Releases](https://github.com/shapeshed/kiosk/releases).
+
 ## Features
 
 - Browse Top, New, Best, Ask, Show, and Jobs.
@@ -20,11 +24,6 @@ No accounts. No ads. No analytics. No tracking SDKs.
 Developer documentation lives in [DEVELOPERS.md](DEVELOPERS.md). See
 [CONTRIBUTING.md](.github/CONTRIBUTING.md) for how to propose changes, and
 [SECURITY.md](.github/SECURITY.md) to report a vulnerability privately.
-
-## Releases
-
-Release notes are tracked in [CHANGELOG.md](CHANGELOG.md). CI builds nightly artifacts and
-tag-based release artifacts, but does not publish to Google Play.
 
 ## Privacy
 
