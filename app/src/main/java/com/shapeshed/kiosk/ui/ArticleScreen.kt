@@ -83,6 +83,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -131,7 +132,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -392,6 +392,8 @@ fun ArticleScreen(
     LaunchedEffect(pendingSpeedReader, speedReadWords) {
         if (pendingSpeedReader && speedReadWords.isNotEmpty()) {
             pendingSpeedReader = false
+            showReadAloud = false
+            currentReadAloudBlockIndex = null
             showSpeedReader = true
             barVisible = false
         }
@@ -498,7 +500,7 @@ fun ArticleScreen(
                         )
                     } else {
                         if (allowWebView && readerMode) {
-                            Box(Modifier.size(1.dp).alpha(0f)) {
+                            Box(Modifier.fillMaxSize()) {
                                 ArticleWebView(
                                     url = story.url,
                                     readerMode = true,
@@ -681,22 +683,8 @@ fun ArticleScreen(
                                                 },
                                             )
                                             DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.speed_reader)) },
-                                                onClick = {
-                                                    showReaderMenu = false
-                                                    if (speedReadWords.isNotEmpty()) {
-                                                        showSpeedReader = true
-                                                        barVisible = false
-                                                    } else {
-                                                        pendingSpeedReader = true
-                                                        selectedRendererOverride = ArticleRendererOverride.NATIVE_READER
-                                                        readerFailed = false
-                                                        readerShown = false
-                                                    }
-                                                },
-                                            )
-                                            DropdownMenuItem(
                                                 text = { Text(stringResource(R.string.read_aloud)) },
+                                                trailingIcon = { Icon(Icons.Filled.PlayArrow, null) },
                                                 onClick = {
                                                     showReaderMenu = false
                                                     if (readAloudSegments.isNotEmpty()) {
@@ -705,6 +693,26 @@ fun ArticleScreen(
                                                         barVisible = true
                                                     } else {
                                                         pendingReadAloud = true
+                                                        selectedRendererOverride = ArticleRendererOverride.NATIVE_READER
+                                                        readerFailed = false
+                                                        readerShown = false
+                                                    }
+                                                },
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.speed_reader)) },
+                                                trailingIcon = { Icon(Icons.AutoMirrored.Filled.Article, null) },
+                                                onClick = {
+                                                    showReaderMenu = false
+                                                    if (speedReadWords.isNotEmpty()) {
+                                                        showReadAloud = false
+                                                        currentReadAloudBlockIndex = null
+                                                        showSpeedReader = true
+                                                        barVisible = false
+                                                    } else {
+                                                        showReadAloud = false
+                                                        currentReadAloudBlockIndex = null
+                                                        pendingSpeedReader = true
                                                         selectedRendererOverride = ArticleRendererOverride.NATIVE_READER
                                                         readerFailed = false
                                                         readerShown = false
@@ -866,15 +874,13 @@ private fun CommentsModalSheet(
     val nowSeconds = remember { System.currentTimeMillis() / 1000 }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        dragHandle = { CommentsSheetHandle(commentCount, onDismiss) },
+    ) {
         // Bound the height so the LazyColumn has a fixed frame to scroll within.
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.94f)) {
-            Text(
-                text = pluralStringResource(R.plurals.comments_count, commentCount, commentCount),
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-            )
             HorizontalDivider()
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                 when (state) {
@@ -903,73 +909,34 @@ private fun CommentsModalSheet(
 }
 
 @Composable
-fun ReaderExtractionPreloader(
-    stories: List<Story>,
-    modifier: Modifier = Modifier,
-    limit: Int = 10,
+private fun CommentsSheetHandle(
+    commentCount: Int,
+    onDismiss: () -> Unit,
 ) {
-    val context = LocalContext.current
-    val app = context.applicationContext as KioskApp
-    val scope = rememberCoroutineScope()
-    val candidates = remember(stories, limit) {
-        stories.take(limit).filter { story ->
-            val url = story.url ?: return@filter false
-            !url.requiresWebView() && url.renderablePdfUrlOrNull() == null
-        }
-    }
-    val candidateKey = remember(candidates) {
-        candidates.joinToString(separator = "|") { "${it.id}:${it.url}" }
-    }
-    var queue by remember { mutableStateOf<List<Story>>(emptyList()) }
-    var current by remember { mutableStateOf<Story?>(null) }
-    var pageReady by remember(current?.id) { mutableStateOf(false) }
-
-    LaunchedEffect(candidateKey) {
-        queue = candidates.filter { story ->
-            val url = story.url ?: return@filter false
-            ReaderExtractionCache.get(story.id, url) == null &&
-                app.readerExtractions.get(story.id)?.url != url
-        }
-        current = null
-    }
-
-    LaunchedEffect(queue, current) {
-        if (current == null && queue.isNotEmpty()) {
-            current = queue.first()
-            queue = queue.drop(1)
-        }
-    }
-
-    val story = current ?: return
-    val url = story.url ?: return
-    Box(modifier.size(1.dp).alpha(0f)) {
-        ArticleWebView(
-            url = url,
-            readerMode = true,
-            readerHtml = null,
-            pageReady = pageReady,
-            pageBackground = android.graphics.Color.TRANSPARENT,
-            contentTopPad = 0.dp,
-            onPageReady = { pageReady = true },
-            onReaderShownChange = {},
-            onScroll = {},
-            onExtracted = { extraction ->
-                ReaderExtractionCache.put(story.id, url, extraction)
-                current = null
-                scope.launch {
-                    app.readerExtractions.put(
-                        storyId = story.id,
-                        url = url,
-                        title = extraction.title,
-                        contentHtml = extraction.contentHtml,
-                        textContent = extraction.textContent,
-                    )
-                }
-            },
-            onExtractionFailed = {
-                current = null
-            },
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 36.dp, height = 4.dp)
+                .clip(RoundedCornerShape(50))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)),
         )
+        Box(Modifier.fillMaxWidth().padding(start = 16.dp, top = 6.dp, end = 6.dp)) {
+            Text(
+                text = pluralStringResource(R.plurals.comments_count, commentCount, commentCount),
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.align(Alignment.Center),
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            ) {
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
+            }
+        }
     }
 }
 
@@ -1247,7 +1214,9 @@ private fun ArticleWebView(
     DisposableEffect(holder) {
         onDispose {
             holder.destroyed = true
-            holder.webView?.apply {
+            val webView = holder.webView
+            holder.webView = null
+            webView?.apply {
                 webViewClient = WebViewClient()
                 webChromeClient = null
                 onPause()
@@ -1256,7 +1225,6 @@ private fun ArticleWebView(
                 removeAllViews()
                 destroy()
             }
-            holder.webView = null
         }
     }
 }
@@ -1570,12 +1538,14 @@ private fun ReadAloudControls(
     var ready by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var isPlaying by rememberSaveable(segments) { mutableStateOf(false) }
+    var playbackEnded by rememberSaveable(segments) { mutableStateOf(false) }
     var currentIndex by rememberSaveable(segments) { mutableIntStateOf(0) }
     var showPlayerSheet by rememberSaveable { mutableStateOf(false) }
     var draftSpeechRate by rememberSaveable(speechRate) {
         mutableFloatStateOf(speechRate.nearestReadAloudSpeechRate())
     }
     var segmentStartElapsedMillis by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    var playbackProgressNowMillis by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     var availableVoices by remember { mutableStateOf<List<Voice>>(emptyList()) }
     var voiceMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var mediaSession by remember { mutableStateOf<MediaSession?>(null) }
@@ -1597,6 +1567,7 @@ private fun ReadAloudControls(
                         shouldRead.set(false)
                         tts?.stop()
                         isPlaying = false
+                        playbackEnded = false
                         onCurrentBlockChange(null)
                         hasAudioFocus.set(false)
                     }
@@ -1659,6 +1630,8 @@ private fun ReadAloudControls(
                     mainHandler.post {
                         currentIndex = index
                         segmentStartElapsedMillis = SystemClock.elapsedRealtime()
+                        playbackProgressNowMillis = segmentStartElapsedMillis
+                        playbackEnded = false
                         onCurrentBlockChange(segments.getOrNull(index)?.blockIndex)
                         isPlaying = true
                     }
@@ -1681,6 +1654,7 @@ private fun ReadAloudControls(
                         } else {
                             shouldRead.set(false)
                             isPlaying = false
+                            playbackEnded = nextIndex >= segments.size
                             onCurrentBlockChange(null)
                             releaseReadAloudAudioFocus()
                         }
@@ -1692,6 +1666,7 @@ private fun ReadAloudControls(
                     mainHandler.post {
                         shouldRead.set(false)
                         isPlaying = false
+                        playbackEnded = false
                         onCurrentBlockChange(null)
                         releaseReadAloudAudioFocus()
                         error = appContext.getString(R.string.read_aloud_unavailable)
@@ -1702,6 +1677,7 @@ private fun ReadAloudControls(
                     mainHandler.post {
                         shouldRead.set(false)
                         isPlaying = false
+                        playbackEnded = false
                         onCurrentBlockChange(null)
                         releaseReadAloudAudioFocus()
                         error = appContext.getString(R.string.read_aloud_unavailable)
@@ -1712,6 +1688,7 @@ private fun ReadAloudControls(
                     if (interrupted) {
                         mainHandler.post {
                             isPlaying = false
+                            playbackEnded = false
                             releaseReadAloudAudioFocus()
                         }
                     }
@@ -1738,6 +1715,8 @@ private fun ReadAloudControls(
                 shouldRead.set(true)
                 currentIndex = 0
                 segmentStartElapsedMillis = SystemClock.elapsedRealtime()
+                playbackProgressNowMillis = segmentStartElapsedMillis
+                playbackEnded = false
                 onCurrentBlockChange(segments[0].blockIndex)
                 engine.speakReadAloudSegment(
                     text = segments[0].text,
@@ -1748,6 +1727,7 @@ private fun ReadAloudControls(
             } else {
                 shouldRead.set(false)
                 isPlaying = false
+                playbackEnded = false
                 error = appContext.getString(R.string.read_aloud_unavailable)
             }
         }
@@ -1762,6 +1742,14 @@ private fun ReadAloudControls(
             availableVoices.firstOrNull { it.name == selectedVoiceName }?.let(engine::setVoice)
         }
         engine.setSpeechRate(speechRate)
+    }
+
+    LaunchedEffect(isPlaying) {
+        if (!isPlaying) return@LaunchedEffect
+        while (true) {
+            playbackProgressNowMillis = SystemClock.elapsedRealtime()
+            delay(250)
+        }
     }
 
     val selectedVoice = selectedVoiceName?.let { voiceName ->
@@ -1784,12 +1772,15 @@ private fun ReadAloudControls(
         if (!requestReadAloudAudioFocus()) {
             shouldRead.set(false)
             isPlaying = false
+            playbackEnded = false
             error = appContext.getString(R.string.read_aloud_unavailable)
             return
         }
         val safeIndex = index.coerceIn(0, segments.lastIndex)
         currentIndex = safeIndex
         segmentStartElapsedMillis = SystemClock.elapsedRealtime()
+        playbackProgressNowMillis = segmentStartElapsedMillis
+        playbackEnded = false
         shouldRead.set(true)
         onCurrentBlockChange(segments[safeIndex].blockIndex)
         engine.speakReadAloudSegment(
@@ -1806,6 +1797,9 @@ private fun ReadAloudControls(
         if (segments.isEmpty()) return
         val safeIndex = index.coerceIn(0, segments.lastIndex)
         currentIndex = safeIndex
+        segmentStartElapsedMillis = SystemClock.elapsedRealtime()
+        playbackProgressNowMillis = segmentStartElapsedMillis
+        playbackEnded = false
         onCurrentBlockChange(segments[safeIndex].blockIndex)
         val engine = tts
         if (engine != null && isPlaying) {
@@ -1816,8 +1810,10 @@ private fun ReadAloudControls(
         val engine = tts ?: return
         if (isPlaying) {
             shouldRead.set(false)
+            playbackProgressNowMillis = SystemClock.elapsedRealtime()
             engine.stop()
             isPlaying = false
+            playbackEnded = false
             releaseReadAloudAudioFocus()
         } else {
             speakCurrentSegment(engine)
@@ -1831,8 +1827,10 @@ private fun ReadAloudControls(
     fun pausePlayback() {
         if (isPlaying) {
             shouldRead.set(false)
+            playbackProgressNowMillis = SystemClock.elapsedRealtime()
             tts?.stop()
             isPlaying = false
+            playbackEnded = false
             releaseReadAloudAudioFocus()
         }
     }
@@ -1840,13 +1838,11 @@ private fun ReadAloudControls(
     val latestPausePlayback by androidx.compose.runtime.rememberUpdatedState(::pausePlayback)
     val latestSkipToPreviousArticle by androidx.compose.runtime.rememberUpdatedState(onSkipToPreviousArticle)
     val latestSkipToNextArticle by androidx.compose.runtime.rememberUpdatedState(onSkipToNextArticle)
-    val latestSeekToParagraph by androidx.compose.runtime.rememberUpdatedState { position: Long ->
-        moveToSegment(segments.segmentIndexForPosition(position))
-    }
     val latestDismiss by androidx.compose.runtime.rememberUpdatedState {
         shouldRead.set(false)
         tts?.stop()
         releaseReadAloudAudioFocus()
+        playbackEnded = false
         onDismiss()
     }
 
@@ -1897,10 +1893,6 @@ private fun ReadAloudControls(
 
                     override fun onSkipToNext() {
                         latestSkipToNextArticle()
-                    }
-
-                    override fun onSeekTo(pos: Long) {
-                        latestSeekToParagraph(pos)
                     }
                 },
             )
@@ -1956,35 +1948,34 @@ private fun ReadAloudControls(
         )
     }
 
-    LaunchedEffect(mediaSession, isPlaying, ready, error, currentIndex, segments, segmentStartElapsedMillis) {
+    val playbackDurationMillis = remember(segments) { segments.estimatedDurationMillis() }
+    val playbackPositionMillis = segments.readAloudPlaybackPositionMillis(
+        currentIndex = currentIndex,
+        segmentStartElapsedMillis = segmentStartElapsedMillis,
+        nowElapsedMillis = playbackProgressNowMillis,
+        speechRate = speechRate,
+        playbackEnded = playbackEnded,
+    )
+
+    LaunchedEffect(mediaSession, isPlaying, ready, error, playbackEnded, playbackPositionMillis, playbackDurationMillis, speechRate) {
         val actions = (
             PlaybackState.ACTION_PLAY or
             PlaybackState.ACTION_PAUSE or
-            PlaybackState.ACTION_STOP or
-            PlaybackState.ACTION_SEEK_TO
+            PlaybackState.ACTION_STOP
             ) or
             (if (canSkipToPreviousArticle) PlaybackState.ACTION_SKIP_TO_PREVIOUS else 0L) or
             (if (canSkipToNextArticle) PlaybackState.ACTION_SKIP_TO_NEXT else 0L)
-        val segmentBasePosition = segments.positionForSegment(currentIndex)
-        val elapsedInSegment = if (isPlaying) {
-            SystemClock.elapsedRealtime() - segmentStartElapsedMillis
-        } else {
-            0L
-        }
-        val progressPosition = (segmentBasePosition + elapsedInSegment).coerceIn(
-            0L,
-            segments.estimatedDurationMillis(),
-        )
         mediaSession?.setPlaybackState(
             PlaybackState.Builder()
                 .setActions(actions)
                 .setState(
                     when {
                         !ready || error != null -> PlaybackState.STATE_NONE
+                        playbackEnded -> PlaybackState.STATE_STOPPED
                         isPlaying -> PlaybackState.STATE_PLAYING
                         else -> PlaybackState.STATE_PAUSED
                     },
-                    progressPosition,
+                    playbackPositionMillis,
                     if (isPlaying) 1f else 0f,
                 )
                 .build(),
@@ -1995,11 +1986,10 @@ private fun ReadAloudControls(
         initialValue = SwipeToDismissBoxValue.Settled,
         positionalThreshold = { distance -> distance * 0.35f },
     )
-    val miniPlayerProgress = if (segments.isEmpty()) {
+    val miniPlayerProgress = if (playbackDurationMillis <= 0L) {
         0f
     } else {
-        ((currentIndex + 1).coerceAtMost(segments.size).toFloat() / segments.size.toFloat())
-            .coerceIn(0f, 1f)
+        (playbackPositionMillis.toFloat() / playbackDurationMillis.toFloat()).coerceIn(0f, 1f)
     }
     val animatedPlayerProgress by animateFloatAsState(
         targetValue = miniPlayerProgress,
@@ -2409,8 +2399,9 @@ private data class ReadAloudSegment(
     val text: String,
     val blockIndex: Int,
 ) {
+    val wordCount: Int = text.readAloudWordCount()
     val estimatedDurationMillis: Long =
-        ((text.readAloudWordCount().toFloat() / ReadAloudBaseWordsPerMinute) * 60_000f)
+        ((wordCount.toFloat() / ReadAloudBaseWordsPerMinute) * 60_000f)
             .toLong()
             .coerceAtLeast(ReadAloudMinimumSegmentMillis)
 }
@@ -2431,17 +2422,35 @@ private fun ReaderArticle.readAloudSegments(): List<ReadAloudSegment> =
 private fun List<ReadAloudSegment>.estimatedDurationMillis(): Long =
     sumOf { it.estimatedDurationMillis }.coerceAtLeast(ReadAloudMinimumSegmentMillis)
 
-private fun List<ReadAloudSegment>.positionForSegment(index: Int): Long =
-    take(index.coerceIn(0, size)).sumOf { it.estimatedDurationMillis }
-
-private fun List<ReadAloudSegment>.segmentIndexForPosition(positionMillis: Long): Int {
-    if (isEmpty()) return 0
-    var elapsed = 0L
-    forEachIndexed { index, segment ->
-        elapsed += segment.estimatedDurationMillis
-        if (positionMillis < elapsed) return index
-    }
-    return lastIndex
+private fun List<ReadAloudSegment>.readAloudPlaybackPositionMillis(
+    currentIndex: Int,
+    segmentStartElapsedMillis: Long,
+    nowElapsedMillis: Long,
+    speechRate: Float,
+    playbackEnded: Boolean,
+): Long {
+    if (isEmpty()) return 0L
+    val durationMillis = estimatedDurationMillis()
+    if (playbackEnded) return durationMillis
+    val safeIndex = currentIndex.coerceIn(0, lastIndex)
+    val totalWords = sumOf { it.wordCount }.coerceAtLeast(1)
+    val baseWords = take(safeIndex).sumOf { it.wordCount }
+    val currentSegmentWords = getOrNull(safeIndex)?.wordCount ?: 0
+    val elapsedWordsInSegment = (
+        (nowElapsedMillis - segmentStartElapsedMillis)
+            .coerceAtLeast(0L)
+            .toFloat() /
+            60_000f *
+            ReadAloudBaseWordsPerMinute *
+            speechRate.coerceAtLeast(0.1f)
+        )
+        .coerceAtLeast(0f)
+        .coerceAtMost(currentSegmentWords.toFloat())
+    val wordProgress = (baseWords.toFloat() + elapsedWordsInSegment).coerceIn(0f, totalWords.toFloat())
+    return ((wordProgress / totalWords.toFloat()) * durationMillis.toFloat())
+        .toLong()
+        .coerceAtLeast(0L)
+        .coerceAtMost(durationMillis)
 }
 
 private fun ReaderArticle.firstImageUrlOrNull(): String? =
@@ -2476,6 +2485,8 @@ private fun String.chunkForTextToSpeech(): List<String> {
 }
 
 private const val SpeedReaderInitialPauseMillis = 300L
+private const val SpeedReaderEndPauseMillis = 800L
+private const val SpeedReaderExitFadeMillis = 240
 private const val SpeedReaderMinWordsPerMinute = 150
 private const val SpeedReaderMaxWordsPerMinute = 800
 private const val SpeedReaderWordsPerMinuteStep = 25
@@ -2499,8 +2510,15 @@ private fun SpeedReaderOverlay(
     val readerFontFamily = readerFont.fontFamily
     var wordIndex by rememberSaveable(words) { mutableIntStateOf(0) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var exiting by remember(words) { mutableStateOf(false) }
     val latestWordsPerMinute by androidx.compose.runtime.rememberUpdatedState(
         wordsPerMinute.coerceIn(SpeedReaderMinWordsPerMinute, SpeedReaderMaxWordsPerMinute),
+    )
+    val latestOnDismiss by androidx.compose.runtime.rememberUpdatedState(onDismiss)
+    val overlayAlpha by animateFloatAsState(
+        targetValue = if (exiting) 0f else 1f,
+        animationSpec = tween(durationMillis = SpeedReaderExitFadeMillis),
+        label = "speedReaderExitAlpha",
     )
     val progress = if (words.isEmpty()) {
         0f
@@ -2516,16 +2534,23 @@ private fun SpeedReaderOverlay(
 
     LaunchedEffect(words) {
         wordIndex = 0
+        exiting = false
+        if (words.isEmpty()) return@LaunchedEffect
         delay(SpeedReaderInitialPauseMillis)
         while (wordIndex < words.lastIndex) {
             delay(60_000L / latestWordsPerMinute.coerceAtLeast(1))
             wordIndex += 1
         }
+        delay(SpeedReaderEndPauseMillis)
+        exiting = true
+        delay(SpeedReaderExitFadeMillis.toLong())
+        latestOnDismiss()
     }
 
     Box(
         modifier = modifier
             .fillMaxSize()
+            .graphicsLayer { alpha = overlayAlpha }
             .background(background),
     ) {
         Row(

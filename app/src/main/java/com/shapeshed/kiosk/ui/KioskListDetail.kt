@@ -12,6 +12,7 @@ import androidx.compose.material3.adaptive.navigation.NavigableListDetailPaneSca
 import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,12 +45,15 @@ fun KioskListDetail() {
     val showListSelection = LocalConfiguration.current.screenWidthDp >= 600
     val storyIdsByFeed = remember { mutableStateMapOf<Feed, List<Long>>() }
     var activeFeed by rememberSaveable { mutableStateOf<Feed?>(null) }
+    var articleOpenedFromSearch by rememberSaveable { mutableStateOf(false) }
+    var restoreSearchRequest by rememberSaveable { mutableIntStateOf(0) }
     val activeStoryIds = activeFeed?.let { storyIdsByFeed[it] }.orEmpty()
     val activeStoryIndex = selectedId?.let(activeStoryIds::indexOf) ?: -1
     val previousStoryInListId = activeStoryIds.getOrNull(activeStoryIndex - 1)
     val nextStoryInListId = activeStoryIds.getOrNull(activeStoryIndex + 1)
     fun openStory(feed: Feed?, id: Long, renderer: ArticleRendererOverride?) {
-        activeFeed = feed
+        articleOpenedFromSearch = feed == null
+        feed?.let { activeFeed = it }
         scope.launch {
             app.settings.markViewed(id)
             navigator.navigateTo(
@@ -65,6 +69,8 @@ fun KioskListDetail() {
             AnimatedPane {
                 StoriesScreen(
                     selectedStoryId = selectedId?.takeIf { showListSelection },
+                    articleOpen = selectedId != null,
+                    restoreSearchRequest = restoreSearchRequest,
                     onFeedStoriesChange = { feed, storyIds ->
                         storyIdsByFeed[feed] = storyIds
                     },
@@ -84,7 +90,13 @@ fun KioskListDetail() {
                         previousStoryId = previousStoryInListId,
                         nextStoryId = nextStoryInListId,
                         showBack = navigator.canNavigateBack(),
-                        onBack = { scope.launch { navigator.navigateBack() } },
+                        onBack = {
+                            scope.launch {
+                                val shouldRestoreSearch = articleOpenedFromSearch
+                                navigator.navigateBack()
+                                if (shouldRestoreSearch) restoreSearchRequest += 1
+                            }
+                        },
                     )
                 } else {
                     EmptyDetail()

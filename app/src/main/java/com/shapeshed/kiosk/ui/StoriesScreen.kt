@@ -60,6 +60,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -95,6 +96,8 @@ private val FEEDS = Feed.entries
 @Composable
 fun StoriesScreen(
     selectedStoryId: Long?,
+    articleOpen: Boolean,
+    restoreSearchRequest: Int,
     onFeedStoriesChange: (Feed, List<Long>) -> Unit,
     onOpenStory: (Feed?, Long, ArticleRendererOverride?) -> Unit,
     modifier: Modifier = Modifier,
@@ -122,10 +125,47 @@ fun StoriesScreen(
     var selectedFilter by remember { mutableStateOf(SearchFilter.STORIES) }
     var selectedSort by remember { mutableStateOf(SearchSort.RELEVANCE) }
     val searchViewModel: SearchViewModel = viewModel(factory = SearchViewModel.factory)
+    var wasSearchExpanded by remember { mutableStateOf(false) }
+    var wasArticleOpen by remember { mutableStateOf(articleOpen) }
+    var restoreSearchAfterArticle by rememberSaveable { mutableStateOf(false) }
+    var collapseSearchForArticle by remember { mutableStateOf(false) }
+    var keepSearchQueryOnCollapse by remember { mutableStateOf(false) }
 
     BackHandler(enabled = isSearchExpanded) {
+        keepSearchQueryOnCollapse = false
         textFieldState.setTextAndPlaceCursorAtEnd("")
         scope.launch { searchBarState.animateToCollapsed() }
+    }
+
+    LaunchedEffect(isSearchExpanded) {
+        if (wasSearchExpanded && !isSearchExpanded) {
+            if (!keepSearchQueryOnCollapse) {
+                textFieldState.setTextAndPlaceCursorAtEnd("")
+            }
+            keepSearchQueryOnCollapse = false
+        }
+        wasSearchExpanded = isSearchExpanded
+    }
+
+    LaunchedEffect(articleOpen) {
+        if (!wasArticleOpen && articleOpen && collapseSearchForArticle) {
+            collapseSearchForArticle = false
+            keepSearchQueryOnCollapse = true
+            searchBarState.animateToCollapsed()
+        }
+        if (wasArticleOpen && !articleOpen && restoreSearchAfterArticle) {
+            restoreSearchAfterArticle = false
+            searchBarState.animateToExpanded()
+        }
+        wasArticleOpen = articleOpen
+    }
+
+    LaunchedEffect(restoreSearchRequest) {
+        if (restoreSearchRequest > 0) {
+            restoreSearchAfterArticle = false
+            searchBarState.animateToExpanded()
+            keepSearchQueryOnCollapse = false
+        }
     }
 
     // Remember the feed the user settles on, so it reopens next launch.
@@ -149,6 +189,7 @@ fun StoriesScreen(
                 if (isSearchExpanded) {
                     IconButton(
                         onClick = {
+                            keepSearchQueryOnCollapse = false
                             textFieldState.setTextAndPlaceCursorAtEnd("")
                             scope.launch { searchBarState.animateToCollapsed() }
                         },
@@ -221,7 +262,9 @@ fun StoriesScreen(
                 onSortChange = { selectedSort = it },
                 onOpenStory = { id ->
                     searchViewModel.markViewed(id)
-                    scope.launch { searchBarState.animateToCollapsed() }
+                    restoreSearchAfterArticle = true
+                    collapseSearchForArticle = true
+                    keepSearchQueryOnCollapse = true
                     onOpenStory(null, id, null)
                 },
                 viewModel = searchViewModel,
