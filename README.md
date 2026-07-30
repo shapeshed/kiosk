@@ -2,10 +2,6 @@
 
 A Hacker News reader for Android.
 
-Kiosk is built around reading, not browsing. It shows Hacker News feeds, searches historical
-stories, extracts readable articles, warms likely next articles, and keeps comments close at hand.
-No accounts. No ads. No analytics. No tracking SDKs.
-
 ## Install
 
 Release APKs are available from [GitHub Releases](https://github.com/shapeshed/kiosk/releases).
