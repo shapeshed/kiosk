@@ -1,5 +1,6 @@
 package com.shapeshed.kiosk.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -51,15 +52,22 @@ fun KioskListDetail() {
     val activeStoryIndex = selectedId?.let(activeStoryIds::indexOf) ?: -1
     val previousStoryInListId = activeStoryIds.getOrNull(activeStoryIndex - 1)
     val nextStoryInListId = activeStoryIds.getOrNull(activeStoryIndex + 1)
-    fun openStory(feed: Feed?, id: Long, renderer: ArticleRendererOverride?) {
+    fun openStory(feed: Feed?, id: Long, forceNativeReader: Boolean) {
         articleOpenedFromSearch = feed == null
         feed?.let { activeFeed = it }
         scope.launch {
             app.settings.markViewed(id)
             navigator.navigateTo(
                 ListDetailPaneScaffoldRole.Detail,
-                ArticleDestination(storyId = id, renderer = renderer).toNavigationKey(),
+                ArticleDestination(storyId = id, forceNativeReader = forceNativeReader).toNavigationKey(),
             )
+        }
+    }
+    fun closeArticle() {
+        scope.launch {
+            val shouldRestoreSearch = articleOpenedFromSearch
+            navigator.navigateBack()
+            if (shouldRestoreSearch) restoreSearchRequest += 1
         }
     }
 
@@ -83,20 +91,26 @@ fun KioskListDetail() {
                 val contentKey = navigator.currentDestination?.contentKey
                 val destination = contentKey?.toArticleDestinationOrNull()
                 if (destination != null) {
+                    // NavigableListDetailPaneScaffold handles the system back gesture itself by
+                    // calling navigator.navigateBack() directly, which bypasses the onBack lambda
+                    // below (that only runs from the visible back-arrow tap) — so a back swipe never
+                    // restored search. This nested BackHandler takes priority over the scaffold's own
+                    // handling and runs the same close-article logic for the gesture too.
+                    BackHandler(enabled = navigator.canNavigateBack(), onBack = ::closeArticle)
                     ArticleScreen(
                         storyId = destination.storyId,
-                        rendererOverride = destination.renderer,
+                        forceNativeReader = destination.forceNativeReader,
                         storyIds = activeStoryIds,
                         previousStoryId = previousStoryInListId,
                         nextStoryId = nextStoryInListId,
                         showBack = navigator.canNavigateBack(),
-                        onBack = {
-                            scope.launch {
-                                val shouldRestoreSearch = articleOpenedFromSearch
-                                navigator.navigateBack()
-                                if (shouldRestoreSearch) restoreSearchRequest += 1
-                            }
-                        },
+                        onBack = ::closeArticle,
+                        // Swiping to a different story leaves the original search-result context —
+                        // back from wherever you end up should return to the plain list, not
+                        // re-expand search. Without this, articleOpenedFromSearch stays stuck true
+                        // for the rest of the detail-pane session since it's only ever set once, in
+                        // openStory, and swiping never routes back through there.
+                        onOpenAdjacentStory = { articleOpenedFromSearch = false },
                     )
                 } else {
                     EmptyDetail()
@@ -108,32 +122,16 @@ fun KioskListDetail() {
 
 data class ArticleDestination(
     val storyId: Long,
-    val renderer: ArticleRendererOverride? = null,
+    val forceNativeReader: Boolean = false,
 )
 
-enum class ArticleRendererOverride {
-    WEB_PAGE,
-    WEB_READER,
-    NATIVE_READER,
-}
-
 private fun ArticleDestination.toNavigationKey(): String =
-    when (renderer) {
-        ArticleRendererOverride.WEB_PAGE -> "$storyId:web-page"
-        ArticleRendererOverride.WEB_READER -> "$storyId:web"
-        ArticleRendererOverride.NATIVE_READER -> "$storyId:native"
-        null -> storyId.toString()
-    }
+    if (forceNativeReader) "$storyId:native" else storyId.toString()
 
 private fun String.toArticleDestinationOrNull(): ArticleDestination? {
     val storyId = substringBefore(':').toLongOrNull() ?: return null
-    val renderer = when (substringAfter(':', missingDelimiterValue = "")) {
-        "web-page" -> ArticleRendererOverride.WEB_PAGE
-        "web" -> ArticleRendererOverride.WEB_READER
-        "native" -> ArticleRendererOverride.NATIVE_READER
-        else -> null
-    }
-    return ArticleDestination(storyId = storyId, renderer = renderer)
+    val forceNativeReader = substringAfter(':', missingDelimiterValue = "") == "native"
+    return ArticleDestination(storyId = storyId, forceNativeReader = forceNativeReader)
 }
 
 @Composable

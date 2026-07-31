@@ -1,7 +1,6 @@
 package com.shapeshed.kiosk.ui
 
 import androidx.annotation.StringRes
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -56,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -99,7 +99,7 @@ fun StoriesScreen(
     articleOpen: Boolean,
     restoreSearchRequest: Int,
     onFeedStoriesChange: (Feed, List<Long>) -> Unit,
-    onOpenStory: (Feed?, Long, ArticleRendererOverride?) -> Unit,
+    onOpenStory: (Feed?, Long, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val app = LocalContext.current.applicationContext as KioskApp
@@ -129,20 +129,17 @@ fun StoriesScreen(
     var wasArticleOpen by remember { mutableStateOf(articleOpen) }
     var restoreSearchAfterArticle by rememberSaveable { mutableStateOf(false) }
     var collapseSearchForArticle by remember { mutableStateOf(false) }
-    var keepSearchQueryOnCollapse by remember { mutableStateOf(false) }
+    var lastHandledRestoreSearchRequest by rememberSaveable { mutableIntStateOf(0) }
 
-    BackHandler(enabled = isSearchExpanded) {
-        keepSearchQueryOnCollapse = false
-        textFieldState.setTextAndPlaceCursorAtEnd("")
-        scope.launch { searchBarState.animateToCollapsed() }
-    }
-
-    LaunchedEffect(isSearchExpanded) {
-        if (wasSearchExpanded && !isSearchExpanded) {
-            if (!keepSearchQueryOnCollapse) {
-                textFieldState.setTextAndPlaceCursorAtEnd("")
-            }
-            keepSearchQueryOnCollapse = false
+    // Material3's SearchBar installs its own PredictiveBackHandler internally (nested inside the
+    // expanded layout), which always wins priority over a BackHandler declared here — so a
+    // hand-rolled BackHandler for collapsing search on back never actually fires. Instead, react to
+    // the state SearchBarState already exposes: clear the query whenever search collapses for a
+    // reason other than opening an article (articleOpen is already true in that case, since it's
+    // what triggers the collapse below).
+    LaunchedEffect(isSearchExpanded, articleOpen) {
+        if (wasSearchExpanded && !isSearchExpanded && !articleOpen) {
+            textFieldState.setTextAndPlaceCursorAtEnd("")
         }
         wasSearchExpanded = isSearchExpanded
     }
@@ -150,7 +147,6 @@ fun StoriesScreen(
     LaunchedEffect(articleOpen) {
         if (!wasArticleOpen && articleOpen && collapseSearchForArticle) {
             collapseSearchForArticle = false
-            keepSearchQueryOnCollapse = true
             searchBarState.animateToCollapsed()
         }
         if (wasArticleOpen && !articleOpen && restoreSearchAfterArticle) {
@@ -160,11 +156,17 @@ fun StoriesScreen(
         wasArticleOpen = articleOpen
     }
 
+    // restoreSearchRequest is a one-shot signal from KioskListDetail (bumped when the back gesture —
+    // not just the back button — closes an article that came from search). Comparing against the
+    // last-handled value (rememberSaveable, so it survives StoriesScreen being disposed and recreated
+    // when the list pane is hidden behind a full-screen article) stops a stale, already-handled
+    // request from re-firing on remount — which otherwise re-expanded search after closing an
+    // unrelated article opened straight from the list, since restoreSearchRequest is never reset to 0.
     LaunchedEffect(restoreSearchRequest) {
-        if (restoreSearchRequest > 0) {
+        if (restoreSearchRequest > lastHandledRestoreSearchRequest) {
+            lastHandledRestoreSearchRequest = restoreSearchRequest
             restoreSearchAfterArticle = false
             searchBarState.animateToExpanded()
-            keepSearchQueryOnCollapse = false
         }
     }
 
@@ -188,11 +190,9 @@ fun StoriesScreen(
             leadingIcon = {
                 if (isSearchExpanded) {
                     IconButton(
-                        onClick = {
-                            keepSearchQueryOnCollapse = false
-                            textFieldState.setTextAndPlaceCursorAtEnd("")
-                            scope.launch { searchBarState.animateToCollapsed() }
-                        },
+                        // The text clears reactively once collapsed (see the isSearchExpanded
+                        // LaunchedEffect above) — no need to clear it here too.
+                        onClick = { scope.launch { searchBarState.animateToCollapsed() } },
                     ) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
@@ -264,8 +264,7 @@ fun StoriesScreen(
                     searchViewModel.markViewed(id)
                     restoreSearchAfterArticle = true
                     collapseSearchForArticle = true
-                    keepSearchQueryOnCollapse = true
-                    onOpenStory(null, id, null)
+                    onOpenStory(null, id, false)
                 },
                 viewModel = searchViewModel,
             )
@@ -409,7 +408,7 @@ private fun FeedPane(
     feed: Feed,
     selectedStoryId: Long?,
     onStoryOrderChange: (Feed, List<Long>) -> Unit,
-    onOpenStory: (Feed?, Long, ArticleRendererOverride?) -> Unit,
+    onOpenStory: (Feed?, Long, Boolean) -> Unit,
     viewModel: StoriesViewModel = viewModel(
         key = "feed-${feed.name}",
         factory = StoriesViewModel.factory(feed),
@@ -441,7 +440,7 @@ private fun FeedPane(
                         onLoadMore = viewModel::loadMore,
                         onOpenStory = { id ->
                             viewModel.markViewed(id)
-                            onOpenStory(feed, id, null)
+                            onOpenStory(feed, id, false)
                         },
                     )
                 }
