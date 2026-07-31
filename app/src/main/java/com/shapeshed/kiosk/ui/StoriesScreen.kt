@@ -44,23 +44,21 @@ import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
+import androidx.compose.material3.SearchBarState
 import androidx.compose.material3.SearchBarValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.rememberContainedSearchBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -97,7 +95,8 @@ private val FEEDS = Feed.entries
 fun StoriesScreen(
     selectedStoryId: Long?,
     articleOpen: Boolean,
-    restoreSearchRequest: Int,
+    openingArticleFromSearch: Boolean,
+    searchBarState: SearchBarState,
     onFeedStoriesChange: (Feed, List<Long>) -> Unit,
     onOpenStory: (Feed?, Long, Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -119,55 +118,28 @@ fun StoriesScreen(
     ) { FEEDS.size }
     val scope = rememberCoroutineScope()
     val textFieldState = rememberTextFieldState()
-    val searchBarState = rememberContainedSearchBarState()
     val isSearchExpanded by remember { derivedStateOf { searchBarState.currentValue == SearchBarValue.Expanded } }
     val searchQueryText by remember { derivedStateOf { textFieldState.text.toString() } }
     var selectedFilter by remember { mutableStateOf(SearchFilter.STORIES) }
     var selectedSort by remember { mutableStateOf(SearchSort.RELEVANCE) }
     val searchViewModel: SearchViewModel = viewModel(factory = SearchViewModel.factory)
     var wasSearchExpanded by remember { mutableStateOf(false) }
-    var wasArticleOpen by remember { mutableStateOf(articleOpen) }
-    var restoreSearchAfterArticle by rememberSaveable { mutableStateOf(false) }
-    var collapseSearchForArticle by remember { mutableStateOf(false) }
-    var lastHandledRestoreSearchRequest by rememberSaveable { mutableIntStateOf(0) }
 
     // Material3's SearchBar installs its own PredictiveBackHandler internally (nested inside the
     // expanded layout), which always wins priority over a BackHandler declared here — so a
     // hand-rolled BackHandler for collapsing search on back never actually fires. Instead, react to
     // the state SearchBarState already exposes: clear the query whenever search collapses for a
-    // reason other than opening an article (articleOpen is already true in that case, since it's
-    // what triggers the collapse below).
-    LaunchedEffect(isSearchExpanded, articleOpen) {
-        if (wasSearchExpanded && !isSearchExpanded && !articleOpen) {
+    // reason other than opening an article. KioskListDetail collapses search BEFORE navigating to a
+    // search-originated article (so it's already closed once the article appears, not collapsing
+    // visibly underneath it) — openingArticleFromSearch covers exactly that gap, where the collapse
+    // has already happened but articleOpen hasn't gone true yet; without it this effect can't tell
+    // that apart from the user genuinely exiting search, and clears the query right as the article
+    // opens — which is then still gone once the article closes and search is restored.
+    LaunchedEffect(isSearchExpanded, articleOpen, openingArticleFromSearch) {
+        if (wasSearchExpanded && !isSearchExpanded && !articleOpen && !openingArticleFromSearch) {
             textFieldState.setTextAndPlaceCursorAtEnd("")
         }
         wasSearchExpanded = isSearchExpanded
-    }
-
-    LaunchedEffect(articleOpen) {
-        if (!wasArticleOpen && articleOpen && collapseSearchForArticle) {
-            collapseSearchForArticle = false
-            searchBarState.animateToCollapsed()
-        }
-        if (wasArticleOpen && !articleOpen && restoreSearchAfterArticle) {
-            restoreSearchAfterArticle = false
-            searchBarState.animateToExpanded()
-        }
-        wasArticleOpen = articleOpen
-    }
-
-    // restoreSearchRequest is a one-shot signal from KioskListDetail (bumped when the back gesture —
-    // not just the back button — closes an article that came from search). Comparing against the
-    // last-handled value (rememberSaveable, so it survives StoriesScreen being disposed and recreated
-    // when the list pane is hidden behind a full-screen article) stops a stale, already-handled
-    // request from re-firing on remount — which otherwise re-expanded search after closing an
-    // unrelated article opened straight from the list, since restoreSearchRequest is never reset to 0.
-    LaunchedEffect(restoreSearchRequest) {
-        if (restoreSearchRequest > lastHandledRestoreSearchRequest) {
-            lastHandledRestoreSearchRequest = restoreSearchRequest
-            restoreSearchAfterArticle = false
-            searchBarState.animateToExpanded()
-        }
     }
 
     // Remember the feed the user settles on, so it reopens next launch.
@@ -262,8 +234,6 @@ fun StoriesScreen(
                 onSortChange = { selectedSort = it },
                 onOpenStory = { id ->
                     searchViewModel.markViewed(id)
-                    restoreSearchAfterArticle = true
-                    collapseSearchForArticle = true
                     onOpenStory(null, id, false)
                 },
                 viewModel = searchViewModel,
