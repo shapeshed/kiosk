@@ -10,6 +10,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -24,6 +26,7 @@ data class ReaderExtractionEntity(
     val lastAccessedMillis: Long,
     val byteSize: Int,
     val readerVersion: Int,
+    val ogImageUrl: String? = null,
 )
 
 @Dao
@@ -49,19 +52,25 @@ interface ReaderExtractionDao {
 
 @Database(
     entities = [ReaderExtractionEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class ReaderCacheDatabase : RoomDatabase() {
     abstract fun readerExtractionDao(): ReaderExtractionDao
 
     companion object {
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reader_extractions ADD COLUMN ogImageUrl TEXT")
+            }
+        }
+
         fun create(context: Context): ReaderCacheDatabase =
             Room.databaseBuilder(
                 context.applicationContext,
                 ReaderCacheDatabase::class.java,
                 "reader_cache.db",
-            ).build()
+            ).addMigrations(MIGRATION_1_2).build()
     }
 }
 
@@ -81,6 +90,7 @@ class ReaderExtractionStore(
         title: String?,
         contentHtml: String,
         textContent: String,
+        ogImageUrl: String?,
     ) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         dao.put(
@@ -95,8 +105,10 @@ class ReaderExtractionStore(
                 byteSize = url.utf8Size() +
                     title.orEmpty().utf8Size() +
                     contentHtml.utf8Size() +
-                    textContent.utf8Size(),
+                    textContent.utf8Size() +
+                    ogImageUrl.orEmpty().utf8Size(),
                 readerVersion = ReaderCacheVersion,
+                ogImageUrl = ogImageUrl,
             ),
         )
         evictIfNeeded()

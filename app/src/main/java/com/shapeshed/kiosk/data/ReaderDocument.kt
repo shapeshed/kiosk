@@ -10,6 +10,7 @@ data class ReaderArticle(
     val title: String?,
     val source: String?,
     val blocks: List<ReaderBlock>,
+    val ogImageUrl: String? = null,
 )
 
 sealed interface ReaderBlock {
@@ -37,12 +38,14 @@ fun parseReaderArticle(
     source: String?,
     contentHtml: String,
     baseUrl: String?,
+    ogImageUrl: String? = null,
 ): ReaderArticle {
     val document = Jsoup.parseBodyFragment(contentHtml, baseUrl.orEmpty())
     return ReaderArticle(
         title = title?.takeIf { it.isNotBlank() },
         source = source?.takeIf { it.isNotBlank() },
         blocks = document.body().children().flatMap(::parseBlock),
+        ogImageUrl = ogImageUrl?.takeIf { it.isNotBlank() },
     )
 }
 

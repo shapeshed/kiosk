@@ -1,5 +1,0 @@
-<paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <cache-path
-        name="pdf"
-        path="pdf/" />
-</paths>

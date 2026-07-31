@@ -34,12 +34,17 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import kotlin.math.abs
 
-// Clone the page, run Readability on it, and hand back {t: title, c: contentHtml} — or "" on failure.
+// Clone the page, run Readability on it, and hand back {t: title, c: contentHtml, x: textContent,
+// og: og:image url} — or "" on failure. og:image is read from the live document (not the clone
+// Readability consumes), so it's cheap: the page is already loaded, no extra network round trip.
 private const val EXTRACT_JS =
-    "(function(){try{var a=new Readability(document.cloneNode(true),{classesToPreserve:" +
+    "(function(){try{" +
+        "var og=document.querySelector(\"meta[property='og:image']\");" +
+        "var a=new Readability(document.cloneNode(true),{classesToPreserve:" +
         "['caption','emoji','hidden','invisible','sr-only','visually-hidden','visuallyhidden'," +
         "'wp-caption','wp-caption-text','wp-smiley']}).parse();" +
-        "return a?JSON.stringify({t:a.title,c:a.content,x:a.textContent||''}):\"\";}catch(e){return \"\";}})();"
+        "return a?JSON.stringify({t:a.title,c:a.content,x:a.textContent||'',og:(og&&og.content)||''}):\"\";" +
+        "}catch(e){return \"\";}})();"
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -212,6 +217,7 @@ internal data class ReaderExtraction(
     val title: String?,
     val contentHtml: String,
     val textContent: String,
+    val ogImageUrl: String?,
 )
 
 internal object ReaderExtractionCache {
@@ -269,6 +275,7 @@ internal fun ReaderExtractionEntity.toReaderExtraction(): ReaderExtraction =
         title = title,
         contentHtml = contentHtml,
         textContent = textContent,
+        ogImageUrl = ogImageUrl,
     )
 
 @Composable
@@ -290,5 +297,6 @@ private fun parseExtraction(raw: String?): ReaderExtraction? {
         title = obj.optString("t").takeIf { it.isNotBlank() },
         contentHtml = content,
         textContent = obj.optString("x"),
+        ogImageUrl = obj.optString("og").takeIf { it.isNotBlank() },
     )
 }

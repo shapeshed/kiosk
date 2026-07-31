@@ -181,6 +181,9 @@ internal fun NativeReaderArticle(
     val readerFontFamily = readerFont.fontFamily
     val latestOnScroll by androidx.compose.runtime.rememberUpdatedState(onScroll)
     var expandedImage by remember(article) { mutableStateOf<ReaderImagePreview?>(null) }
+    val articleHasNoImages = remember(article) {
+        article.blocks.none { it is ReaderBlock.Image || it is ReaderBlock.Figure }
+    }
 
     LaunchedEffect(listState) {
         snapshotFlow { listState.readerScrollKey() }
@@ -222,6 +225,25 @@ internal fun NativeReaderArticle(
                             ),
                             color = muted,
                             modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                    // Fallback hero image: only when Readability found no image of its own — this
+                    // is a substitute for a missing image, not an addition to an article that
+                    // already has one.
+                    if (articleHasNoImages && article.ogImageUrl != null) {
+                        AsyncImage(
+                            model = article.ogImageUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.FillWidth,
+                            modifier = Modifier
+                                // source carries no bottom padding of its own, so this top gap must
+                                // supply the full separation — 32.dp matches the "new section begins"
+                                // spacing already used for heading blocks and the text-post body start,
+                                // both immediately below.
+                                .padding(top = 32.dp)
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { expandedImage = ReaderImagePreview(article.ogImageUrl, null) },
                         )
                     }
                 }

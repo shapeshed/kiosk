@@ -81,11 +81,8 @@ import com.shapeshed.kiosk.data.ReaderTheme
 import com.shapeshed.kiosk.data.Story
 import com.shapeshed.kiosk.data.hostOf
 import com.shapeshed.kiosk.data.parseReaderArticle
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.File
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -196,6 +193,7 @@ fun ArticleScreen(
                 source = hostOf(story?.url),
                 contentHtml = extraction.contentHtml,
                 baseUrl = story?.url,
+                ogImageUrl = extraction.ogImageUrl,
             )
         }
     }
@@ -419,6 +417,7 @@ fun ArticleScreen(
                                 title = extraction.title,
                                 contentHtml = extraction.contentHtml,
                                 textContent = extraction.textContent,
+                                ogImageUrl = extraction.ogImageUrl,
                             )
                         }
                     },
@@ -476,6 +475,7 @@ fun ArticleScreen(
                                 title = extraction.title,
                                 contentHtml = extraction.contentHtml,
                                 textContent = extraction.textContent,
+                                ogImageUrl = extraction.ogImageUrl,
                             )
                         }
                     },
@@ -671,25 +671,7 @@ fun ArticleScreen(
                                             trailingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null) },
                                             onClick = {
                                                 showReaderMenu = false
-                                                if (pdfArticleUrl != null) {
-                                                    scope.launch {
-                                                        val file = withContext(Dispatchers.IO) {
-                                                            runCatching {
-                                                                app.okHttpClient.downloadPdf(
-                                                                    pdfArticleUrl,
-                                                                    File(app.cacheDir, "pdf"),
-                                                                )
-                                                            }.getOrNull()
-                                                        }
-                                                        if (file != null) {
-                                                            openPdfExternally(context, file)
-                                                        } else {
-                                                            openExternally(context, story.url)
-                                                        }
-                                                    }
-                                                } else {
-                                                    openExternally(context, story.url)
-                                                }
+                                                openExternally(context, story.url)
                                             },
                                         )
                                     }
