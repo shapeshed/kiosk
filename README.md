@@ -6,8 +6,12 @@ A Hacker News reader for Android.
 
 Release APKs are available from [GitHub Releases](https://github.com/shapeshed/kiosk/releases).
 
+## Screenshots
+
 <p>
-  <img src="docs/branding/kiosk-feature-graphic.png" alt="Kiosk branded feature graphic" width="820">
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="Kiosk screenshot 1" width="160"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" alt="Kiosk screenshot 2" width="160"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" alt="Kiosk screenshot 3" width="160"></a>
 </p>
 
 ## Features
