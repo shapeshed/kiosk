@@ -1069,6 +1069,7 @@ private fun ReaderBlock.readAloudParagraphs(): List<String> =
         is ReaderBlock.CodeBlock -> emptyList()
         is ReaderBlock.BulletedList -> items.map { it.plainText() }
         is ReaderBlock.NumberedList -> items.map { it.plainText() }
+        is ReaderBlock.Table -> rows.map { row -> row.joinToString(separator = ", ") { it.plainText() } }
         is ReaderBlock.Image -> emptyList()
         is ReaderBlock.Figure -> listOfNotNull(caption?.plainText())
         ReaderBlock.Divider -> emptyList()
