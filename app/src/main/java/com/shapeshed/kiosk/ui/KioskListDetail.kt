@@ -135,7 +135,8 @@ fun KioskListDetail() {
                         previousStoryId = previousStoryInListId,
                         nextStoryId = nextStoryInListId,
                         onOpenAdjacentStory = { adjacentStoryId ->
-                            openStory(activeFeed, adjacentStoryId, destination.renderer)
+                            openStory(activeFeed, adjacentStoryId, destination.forceNativeReader)
+                            articleOpenedFromSearch = false
                         },
                         showBack = navigator.canNavigateBack(),
                         onBack = ::closeArticle,
@@ -144,7 +145,6 @@ fun KioskListDetail() {
                         // re-expand search. Without this, articleOpenedFromSearch stays stuck true
                         // for the rest of the detail-pane session since it's only ever set once, in
                         // openStory, and swiping never routes back through there.
-                        onOpenAdjacentStory = { articleOpenedFromSearch = false },
                     )
                 } else {
                     EmptyDetail()
