@@ -35,15 +35,16 @@ import org.json.JSONTokener
 import kotlin.math.abs
 
 // Clone the page, run Readability on it, and hand back {t: title, c: contentHtml, x: textContent,
-// og: og:image url} — or "" on failure. og:image is read from the live document (not the clone
+// og: social image url} — or "" on failure. The image is read from the live document (not the clone
 // Readability consumes), so it's cheap: the page is already loaded, no extra network round trip.
 private const val EXTRACT_JS =
     "(function(){try{" +
-        "var og=document.querySelector(\"meta[property='og:image']\");" +
+        "var og=document.querySelector(\"meta[property='og:image'],meta[name='twitter:image']\");" +
+        "var oi=og&&og.content?new URL(og.content,document.baseURI).href:'';" +
         "var a=new Readability(document.cloneNode(true),{classesToPreserve:" +
         "['caption','emoji','hidden','invisible','sr-only','visually-hidden','visuallyhidden'," +
         "'wp-caption','wp-caption-text','wp-smiley']}).parse();" +
-        "return a?JSON.stringify({t:a.title,c:a.content,x:a.textContent||'',og:(og&&og.content)||''}):\"\";" +
+        "return a?JSON.stringify({t:a.title,c:a.content,x:a.textContent||'',og:oi}):\"\";" +
         "}catch(e){return \"\";}})();"
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)

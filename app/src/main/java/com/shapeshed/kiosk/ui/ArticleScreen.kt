@@ -694,7 +694,7 @@ fun ArticleScreen(
                     ReadAloudControls(
                         title = readerArticle?.title ?: story?.title,
                         source = readerArticle?.source ?: hostOf(story?.url),
-                        imageUrl = readerArticle?.firstImageUrlOrNull(),
+                        imageUrl = readerArticle?.ogImageUrl ?: readerArticle?.firstImageUrlOrNull(),
                         segments = readAloudSegments,
                         autoPlayKey = readAloudAutoPlayKey,
                         canSkipToPreviousArticle = effectivePreviousStoryId != null,
