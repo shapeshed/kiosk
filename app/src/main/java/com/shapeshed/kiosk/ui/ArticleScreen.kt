@@ -364,6 +364,8 @@ fun ArticleScreen(
                             WebArticlePlaceholder(
                                 story = story,
                                 pageBackground = pageBackground,
+                                pageForeground = android.graphics.Color.parseColor(palette.foreground),
+                                pageMuted = android.graphics.Color.parseColor(palette.muted),
                                 topPad = readerTopPad.dp,
                             )
                         } else {
@@ -404,6 +406,8 @@ fun ArticleScreen(
                     url = story.url,
                     pageReady = pageReady,
                     pageBackground = android.graphics.Color.TRANSPARENT,
+                    pageForeground = android.graphics.Color.parseColor(palette.foreground),
+                    pageMuted = android.graphics.Color.parseColor(palette.muted),
                     contentTopPad = 0.dp,
                     onPageReady = { pageReady = true },
                     onScroll = {},
@@ -463,6 +467,8 @@ fun ArticleScreen(
                     url = nextPreloadUrl,
                     pageReady = nextPageReady,
                     pageBackground = android.graphics.Color.TRANSPARENT,
+                    pageForeground = android.graphics.Color.parseColor(palette.foreground),
+                    pageMuted = android.graphics.Color.parseColor(palette.muted),
                     contentTopPad = 0.dp,
                     onPageReady = { nextPageReady = true },
                     onScroll = {},
@@ -777,6 +783,8 @@ fun ArticleScreen(
 internal fun WebArticlePlaceholder(
     story: Story,
     pageBackground: Int,
+    pageForeground: Int,
+    pageMuted: Int,
     topPad: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
 ) {
@@ -797,7 +805,7 @@ internal fun WebArticlePlaceholder(
             Text(
                 text = story.title,
                 style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = Color(pageForeground),
                 textAlign = TextAlign.Center,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
@@ -806,13 +814,16 @@ internal fun WebArticlePlaceholder(
                 Text(
                     text = host,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color(pageMuted),
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            LoadingIndicator(Modifier.padding(top = 8.dp))
+            LoadingIndicator(
+                modifier = Modifier.padding(top = 8.dp),
+                color = Color(pageForeground),
+            )
         }
     }
 }

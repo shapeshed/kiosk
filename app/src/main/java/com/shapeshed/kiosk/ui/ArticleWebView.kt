@@ -52,6 +52,8 @@ internal fun ArticleWebView(
     url: String,
     pageReady: Boolean,
     pageBackground: Int,
+    pageForeground: Int,
+    pageMuted: Int,
     contentTopPad: Dp,
     loadingStory: Story? = null,
     onPageReady: () -> Unit,
@@ -158,6 +160,8 @@ internal fun ArticleWebView(
                 WebArticlePlaceholder(
                     story = loadingStory,
                     pageBackground = pageBackground,
+                    pageForeground = pageForeground,
+                    pageMuted = pageMuted,
                     topPad = contentTopPad,
                 )
             } else {
