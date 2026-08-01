@@ -684,45 +684,47 @@ fun ArticleScreen(
             }
 
             if (showChrome && showReadAloud) {
-                ReadAloudControls(
-                    title = readerArticle?.title ?: story?.title,
-                    source = readerArticle?.source ?: hostOf(story?.url),
-                    imageUrl = readerArticle?.firstImageUrlOrNull(),
-                    segments = readAloudSegments,
-                    autoPlayKey = readAloudAutoPlayKey,
-                    canSkipToPreviousArticle = effectivePreviousStoryId != null,
-                    canSkipToNextArticle = effectiveNextStoryId != null,
-                    speechRate = readAloudSpeechRate,
-                    selectedVoiceName = readAloudVoiceName,
-                    onSpeechRateChange = { rate ->
-                        scope.launch { app.settings.setReadAloudSpeechRate(rate) }
-                    },
-                    onVoiceNameChange = { voiceName ->
-                        scope.launch { app.settings.setReadAloudVoiceName(voiceName) }
-                    },
-                    onCurrentBlockChange = { currentReadAloudBlockIndex = it },
-                    onSkipToPreviousArticle = {
-                        effectivePreviousStoryId?.let { adjacentStoryId ->
-                            activeStoryId = adjacentStoryId
-                            scope.launch { app.settings.markViewed(adjacentStoryId) }
-                            onOpenAdjacentStory(adjacentStoryId)
-                        }
-                    },
-                    onSkipToNextArticle = {
-                        effectiveNextStoryId?.let { adjacentStoryId ->
-                            activeStoryId = adjacentStoryId
-                            scope.launch { app.settings.markViewed(adjacentStoryId) }
-                            onOpenAdjacentStory(adjacentStoryId)
-                        }
-                    },
-                    onDismiss = {
-                        showReadAloud = false
-                        currentReadAloudBlockIndex = null
-                        barVisible = true
-                    },
-                    backgroundColor = Color(pageBackground),
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
-                )
+                androidx.compose.runtime.key(activeStoryId) {
+                    ReadAloudControls(
+                        title = readerArticle?.title ?: story?.title,
+                        source = readerArticle?.source ?: hostOf(story?.url),
+                        imageUrl = readerArticle?.firstImageUrlOrNull(),
+                        segments = readAloudSegments,
+                        autoPlayKey = readAloudAutoPlayKey,
+                        canSkipToPreviousArticle = effectivePreviousStoryId != null,
+                        canSkipToNextArticle = effectiveNextStoryId != null,
+                        speechRate = readAloudSpeechRate,
+                        selectedVoiceName = readAloudVoiceName,
+                        onSpeechRateChange = { rate ->
+                            scope.launch { app.settings.setReadAloudSpeechRate(rate) }
+                        },
+                        onVoiceNameChange = { voiceName ->
+                            scope.launch { app.settings.setReadAloudVoiceName(voiceName) }
+                        },
+                        onCurrentBlockChange = { currentReadAloudBlockIndex = it },
+                        onSkipToPreviousArticle = {
+                            effectivePreviousStoryId?.let { adjacentStoryId ->
+                                activeStoryId = adjacentStoryId
+                                scope.launch { app.settings.markViewed(adjacentStoryId) }
+                                onOpenAdjacentStory(adjacentStoryId)
+                            }
+                        },
+                        onSkipToNextArticle = {
+                            effectiveNextStoryId?.let { adjacentStoryId ->
+                                activeStoryId = adjacentStoryId
+                                scope.launch { app.settings.markViewed(adjacentStoryId) }
+                                onOpenAdjacentStory(adjacentStoryId)
+                            }
+                        },
+                        onDismiss = {
+                            showReadAloud = false
+                            currentReadAloudBlockIndex = null
+                            barVisible = true
+                        },
+                        backgroundColor = Color(pageBackground),
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+                    )
+                }
             }
 
             if (showChrome && showSpeedReader) {
