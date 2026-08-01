@@ -5,12 +5,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDragHandle
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.layout.AnimatedPane
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
+import androidx.compose.material3.adaptive.layout.PaneExpansionAnchor
+import androidx.compose.material3.adaptive.layout.rememberPaneExpansionState
 import androidx.compose.material3.adaptive.navigation.NavigableListDetailPaneScaffold
 import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.material3.rememberContainedSearchBarState
@@ -67,11 +72,20 @@ fun KioskListDetail() {
     val activeStoryIndex = selectedId?.let(activeStoryIds::indexOf) ?: -1
     val previousStoryInListId = activeStoryIds.getOrNull(activeStoryIndex - 1)
     val nextStoryInListId = activeStoryIds.getOrNull(activeStoryIndex + 1)
-
     LaunchedEffect(selectedId) {
         if (selectedId != null) openingArticleFromSearch = false
     }
 
+    val paneExpansionState = rememberPaneExpansionState(
+        keyProvider = navigator.scaffoldValue,
+        anchors = listOf(
+            PaneExpansionAnchor.Proportion(0.3f),
+            PaneExpansionAnchor.Proportion(0.5f),
+            PaneExpansionAnchor.Proportion(0.7f),
+        ),
+        initialAnchoredIndex = 1,
+    )
+    val paneExpansionInteractionSource = remember { MutableInteractionSource() }
     fun openStory(feed: Feed?, id: Long, forceNativeReader: Boolean) {
         articleOpenedFromSearch = feed == null
         if (feed == null) openingArticleFromSearch = true
@@ -103,6 +117,17 @@ fun KioskListDetail() {
 
     NavigableListDetailPaneScaffold(
         navigator = navigator,
+        paneExpansionState = paneExpansionState,
+        paneExpansionDragHandle = { state ->
+            VerticalDragHandle(
+                modifier = Modifier.paneExpansionDraggable(
+                    state = state,
+                    minTouchTargetSize = LocalMinimumInteractiveComponentSize.current,
+                    interactionSource = paneExpansionInteractionSource,
+                ),
+                interactionSource = paneExpansionInteractionSource,
+            )
+        },
         listPane = {
             AnimatedPane {
                 StoriesScreen(
