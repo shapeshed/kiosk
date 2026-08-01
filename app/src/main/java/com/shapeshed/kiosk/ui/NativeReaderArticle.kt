@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -398,6 +399,15 @@ private fun ReaderBlockView(
             readerFontFamily = readerFontFamily,
             onOpenLink = onOpenLink,
         )
+        is ReaderBlock.Table -> ReaderTable(
+            rows = block.rows,
+            foreground = foreground,
+            link = link,
+            rule = rule,
+            codeBg = codeBg,
+            readerFontFamily = readerFontFamily,
+            onOpenLink = onOpenLink,
+        )
         is ReaderBlock.Image -> AsyncImage(
             model = block.src,
             contentDescription = block.alt,
@@ -413,6 +423,51 @@ private fun ReaderBlockView(
             color = rule,
             modifier = Modifier.padding(top = 10.dp, bottom = 32.dp),
         )
+    }
+}
+
+@Composable
+private fun ReaderTable(
+    rows: List<List<List<ReaderInline>>>,
+    foreground: Color,
+    link: Color,
+    rule: Color,
+    codeBg: Color,
+    readerFontFamily: FontFamily,
+    onOpenLink: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 22.dp)
+            .border(1.dp, rule, RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(8.dp)),
+    ) {
+        rows.forEachIndexed { rowIndex, row ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(if (rowIndex == 0) codeBg else Color.Transparent)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                row.forEach { cell ->
+                    ReaderText(
+                        text = readerAnnotatedString(cell, foreground, link, codeBg, readerFontFamily),
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = readerFontFamily,
+                            fontSize = 17.sp,
+                            lineHeight = 25.sp,
+                            fontWeight = if (rowIndex == 0) FontWeight.Bold else FontWeight.Normal,
+                        ),
+                        color = foreground,
+                        modifier = Modifier.weight(1f),
+                        onOpenLink = onOpenLink,
+                    )
+                }
+            }
+            if (rowIndex < rows.lastIndex) HorizontalDivider(color = rule)
+        }
     }
 }
 

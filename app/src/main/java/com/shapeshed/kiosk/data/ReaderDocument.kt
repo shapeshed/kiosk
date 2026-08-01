@@ -20,6 +20,7 @@ sealed interface ReaderBlock {
     data class CodeBlock(val text: String) : ReaderBlock
     data class BulletedList(val items: List<List<ReaderInline>>) : ReaderBlock
     data class NumberedList(val items: List<List<ReaderInline>>) : ReaderBlock
+    data class Table(val rows: List<List<List<ReaderInline>>>) : ReaderBlock
     data class Image(val src: String, val alt: String?) : ReaderBlock
     data class Figure(val images: List<Image>, val caption: List<ReaderInline>?) : ReaderBlock
     data object Divider : ReaderBlock
@@ -72,7 +73,7 @@ private fun parseBlock(element: Element): List<ReaderBlock> =
             "img" -> parseImage(element)?.let(::listOf).orEmpty()
             "figure" -> parseFigure(element)
             "hr" -> listOf(ReaderBlock.Divider)
-            "table" -> inlineText(element).toParagraphTextOrNull()?.let { listOf(ReaderBlock.Paragraph(it)) }.orEmpty()
+            "table" -> parseTable(element)?.let(::listOf).orEmpty()
             else -> {
                 val childBlocks = element.children().flatMap(::parseBlock)
                 childBlocks.ifEmpty {
@@ -166,6 +167,16 @@ private fun parseList(element: Element): List<List<ReaderInline>>? {
         .filter { it.normalName() == "li" && !it.isHiddenFromReader() }
         .mapNotNull { inlineText(it).toParagraphTextOrNull() }
     return items.takeIf { it.isNotEmpty() }
+}
+
+private fun parseTable(element: Element): ReaderBlock.Table? {
+    val rows = element.select("tr").mapNotNull { row ->
+        val cells = row.children()
+            .filter { it.normalName() == "th" || it.normalName() == "td" }
+            .map(::inlineText)
+        cells.takeIf { it.isNotEmpty() && it.any { cell -> cell.isNotEmpty() } }
+    }
+    return rows.takeIf { it.isNotEmpty() }?.let(ReaderBlock::Table)
 }
 
 private fun inlineText(element: Element): List<ReaderInline> =

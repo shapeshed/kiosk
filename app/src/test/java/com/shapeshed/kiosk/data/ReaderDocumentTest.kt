@@ -110,6 +110,25 @@ class ReaderDocumentTest {
     }
 
     @Test
+    fun parseReaderArticlePreservesTableRowsAndCells() {
+        val table = parseReaderArticle(
+            title = null,
+            source = null,
+            contentHtml = """
+                <table>
+                    <thead><tr><th>Language</th><th>Score</th></tr></thead>
+                    <tbody><tr><td>Kotlin</td><td>10</td></tr></tbody>
+                </table>
+            """.trimIndent(),
+            baseUrl = "https://example.com/story/",
+        ).blocks.single() as ReaderBlock.Table
+
+        assertEquals(2, table.rows.size)
+        assertEquals(listOf("Language", "Score"), table.rows[0].map { cell -> cell.joinToString("") { it.text } })
+        assertEquals(listOf("Kotlin", "10"), table.rows[1].map { cell -> cell.joinToString("") { it.text } })
+    }
+
+    @Test
     fun parseReaderArticleSkipsBrowserHiddenMetadata() {
         val blocks = parseReaderArticle(
             title = null,
