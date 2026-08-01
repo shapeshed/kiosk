@@ -134,6 +134,9 @@ fun KioskListDetail() {
                         storyIds = activeStoryIds,
                         previousStoryId = previousStoryInListId,
                         nextStoryId = nextStoryInListId,
+                        onOpenAdjacentStory = { adjacentStoryId ->
+                            openStory(activeFeed, adjacentStoryId, destination.renderer)
+                        },
                         showBack = navigator.canNavigateBack(),
                         onBack = ::closeArticle,
                         // Swiping to a different story leaves the original search-result context —
