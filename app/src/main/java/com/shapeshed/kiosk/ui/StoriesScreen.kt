@@ -55,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -122,6 +123,7 @@ fun StoriesScreen(
     val searchQueryText by remember { derivedStateOf { textFieldState.text.toString() } }
     var selectedFilter by remember { mutableStateOf(SearchFilter.STORIES) }
     var selectedSort by remember { mutableStateOf(SearchSort.RELEVANCE) }
+    var refreshGeneration by remember { mutableIntStateOf(0) }
     val searchViewModel: SearchViewModel = viewModel(factory = SearchViewModel.factory)
     var wasSearchExpanded by remember { mutableStateOf(false) }
 
@@ -217,6 +219,8 @@ fun StoriesScreen(
                     selectedStoryId = selectedStoryId,
                     onStoryOrderChange = onFeedStoriesChange,
                     onOpenStory = onOpenStory,
+                    refreshGeneration = refreshGeneration,
+                    onRefreshAll = { refreshGeneration++ },
                 )
             }
         }
@@ -379,6 +383,8 @@ private fun FeedPane(
     selectedStoryId: Long?,
     onStoryOrderChange: (Feed, List<Long>) -> Unit,
     onOpenStory: (Feed?, Long, Boolean) -> Unit,
+    refreshGeneration: Int,
+    onRefreshAll: () -> Unit,
     viewModel: StoriesViewModel = viewModel(
         key = "feed-${feed.name}",
         factory = StoriesViewModel.factory(feed),
@@ -388,6 +394,10 @@ private fun FeedPane(
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val loadingMore by viewModel.loadingMore.collectAsStateWithLifecycle()
     val viewedIds by viewModel.viewedIds.collectAsStateWithLifecycle()
+
+    LaunchedEffect(feed, refreshGeneration) {
+        if (refreshGeneration > 0) viewModel.refresh()
+    }
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when (val current = state) {
@@ -399,7 +409,7 @@ private fun FeedPane(
                 }
                 PullToRefreshBox(
                     isRefreshing = refreshing,
-                    onRefresh = viewModel::refresh,
+                    onRefresh = onRefreshAll,
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     StoryList(
@@ -407,6 +417,7 @@ private fun FeedPane(
                         selectedStoryId = selectedStoryId,
                         viewedIds = viewedIds,
                         loadingMore = loadingMore,
+                        refreshGeneration = refreshGeneration,
                         onLoadMore = viewModel::loadMore,
                         onOpenStory = { id ->
                             viewModel.markViewed(id)
@@ -426,10 +437,14 @@ private fun StoryList(
     selectedStoryId: Long?,
     viewedIds: Set<Long>,
     loadingMore: Boolean,
+    refreshGeneration: Int = 0,
     onLoadMore: () -> Unit,
     onOpenStory: (Long) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    LaunchedEffect(refreshGeneration) {
+        if (refreshGeneration > 0) listState.animateScrollToItem(0)
+    }
     // Load the next page once the last few rows come into view.
     val nearEnd by remember {
         derivedStateOf {
