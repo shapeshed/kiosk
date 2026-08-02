@@ -514,6 +514,10 @@ fun ArticleScreen(
                     if (aligningPagerToStory) return@collect
                     val adjacentStoryId = storyIds.getOrNull(page)
                     if (adjacentStoryId != null && adjacentStoryId != activeStoryId) {
+                        // A font change can cause a beyond-bounds page to report a layout scroll
+                        // while the pager settles. Keep the article chrome available after the
+                        // swipe so the reader tools remain reachable on the new article.
+                        barVisible = true
                         activeStoryId = adjacentStoryId
                         scope.launch { app.settings.markViewed(adjacentStoryId) }
                         onOpenAdjacentStory(adjacentStoryId)
@@ -548,10 +552,12 @@ fun ArticleScreen(
                         null
                     },
                     onArticleScroll = { scrollY ->
-                        val dy = scrollY - lastScrollY[0]
-                        lastScrollY[0] = scrollY
-                        if (dy > 12) barVisible = false
-                        else if (dy < -12) barVisible = true
+                        if (articleStoryId == activeStoryId) {
+                            val dy = scrollY - lastScrollY[0]
+                            lastScrollY[0] = scrollY
+                            if (dy > 12) barVisible = false
+                            else if (dy < -12) barVisible = true
+                        }
                     },
                 )
             }
