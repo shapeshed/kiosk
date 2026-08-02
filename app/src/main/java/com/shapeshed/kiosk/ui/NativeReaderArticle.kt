@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,9 +20,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -36,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -48,10 +50,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -60,32 +69,37 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Constraints
 import coil3.compose.AsyncImage
 import com.shapeshed.kiosk.R
 import com.shapeshed.kiosk.data.ReaderArticle
 import com.shapeshed.kiosk.data.ReaderBlock
 import com.shapeshed.kiosk.data.ReaderFont
 import com.shapeshed.kiosk.data.ReaderInline
-import com.shapeshed.kiosk.data.ReaderAlignment
 import com.shapeshed.kiosk.data.ReaderFontSize
 import com.shapeshed.kiosk.data.ReaderLineSpacing
 import com.shapeshed.kiosk.data.ReaderWidth
 import com.shapeshed.kiosk.data.Story
 import kotlinx.coroutines.launch
+import kotlin.math.ceil
 
 internal data class ReaderPresentation(
     val fontSize: ReaderFontSize = ReaderFontSize.MEDIUM,
-    val alignment: ReaderAlignment = ReaderAlignment.LEFT,
-    val lineSpacing: ReaderLineSpacing = ReaderLineSpacing.RELAXED,
+    val justify: Boolean = false,
+    val lineSpacing: ReaderLineSpacing = ReaderLineSpacing.STANDARD,
     val width: ReaderWidth = ReaderWidth.WIDE,
 ) {
-    // M3 bodyLarge is 16sp/24sp; reader sizes scale that baseline while preserving its rhythm.
-    val bodySp: Float get() = 16f * fontSize.scale
-    val bodyLineSp: Float get() = bodySp * lineSpacing.multiplier
-    val textAlign: TextAlign get() = if (alignment == ReaderAlignment.JUSTIFY) TextAlign.Justify else TextAlign.Start
+    // These pairs mirror Material 3's body type scale: 12/16, 14/20, 16/24, 18/28, and 22/28.
+    val bodySp: Float get() = fontSize.sizeSp
+    val bodyLineSp: Float
+        get() = fontSize.lineHeightSp * lineSpacing.multiplier
+    val textAlign: TextAlign get() = if (justify) TextAlign.Justify else TextAlign.Start
 }
 
 private val LocalReaderPresentation = compositionLocalOf { ReaderPresentation() }
@@ -222,20 +236,23 @@ internal fun NativeReaderArticle(
         SelectionContainer {
             LazyColumn(
             state = listState,
-            modifier = modifier.fillMaxSize().background(background),
-            contentPadding = PaddingValues(start = 24.dp, top = topPad, end = 24.dp, bottom = 72.dp),
+            modifier = modifier
+                .fillMaxSize()
+                .background(background),
+            contentPadding = PaddingValues(start = 16.dp, top = topPad, end = 16.dp, bottom = 72.dp),
         ) {
             item(key = "header") {
-                ReaderMeasure(modifier = Modifier.padding(top = 8.dp, bottom = 32.dp)) {
+                ReaderMeasure(modifier = Modifier.padding(top = 0.dp, bottom = readerLineHeightDp())) {
                     article.title?.let {
                         Text(
                             text = it,
                             style = MaterialTheme.typography.headlineMedium.copy(
                                 fontFamily = readerFontFamily,
-                                fontWeight = FontWeight.Bold,
-                            ),
+                                lineHeight = MaterialTheme.typography.headlineMedium.lineHeight,
+                            ).readerTextMetrics(),
                             color = foreground,
-                            textAlign = LocalReaderPresentation.current.textAlign,
+                            textAlign = TextAlign.Start,
+                            modifier = Modifier.semantics { heading() },
                         )
                     }
                     article.source?.let {
@@ -243,10 +260,11 @@ internal fun NativeReaderArticle(
                             text = it,
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = readerFontFamily,
-                            ),
+                                lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
+                            ).readerTextMetrics(),
                             color = muted,
-                            textAlign = LocalReaderPresentation.current.textAlign,
-                            modifier = Modifier.padding(top = 2.dp),
+                            textAlign = TextAlign.Start,
+                            modifier = Modifier.padding(top = 0.dp),
                         )
                     }
                     // Fallback hero image: only when Readability found no image of its own — this
@@ -258,11 +276,9 @@ internal fun NativeReaderArticle(
                             contentDescription = null,
                             contentScale = ContentScale.FillWidth,
                             modifier = Modifier
-                                // source carries no bottom padding of its own, so this top gap must
-                                // supply the full separation — 32.dp matches the "new section begins"
-                                // spacing already used for heading blocks and the text-post body start,
-                                // both immediately below.
-                                .padding(top = 32.dp)
+                                // source carries no bottom padding of its own, so this line-height gap
+                                // supplies the full separation before the image.
+                                .padding(top = readerLineHeightDp())
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable { expandedImage = ReaderImagePreview(article.ogImageUrl, null) },
@@ -321,7 +337,9 @@ private fun ReaderMeasure(
     content: @Composable () -> Unit,
 ) {
     Column(
-        modifier = modifier.fillMaxWidth().widthIn(max = LocalReaderPresentation.current.width.maxDp.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = LocalReaderPresentation.current.width.marginDp.dp),
     ) {
         content()
     }
@@ -340,17 +358,56 @@ private fun ReaderBlockView(
     onOpenImage: (src: String, alt: String?) -> Unit,
 ) {
     when (block) {
-        is ReaderBlock.Heading -> ReaderText(
-            text = readerAnnotatedString(block.text, foreground, link, codeBg, readerFontFamily),
-            style = when (block.level) {
-                1 -> MaterialTheme.typography.headlineMedium
-                2 -> MaterialTheme.typography.titleLarge
-                else -> MaterialTheme.typography.titleMedium
-            }.copy(fontFamily = readerFontFamily, fontWeight = FontWeight.Bold),
-            color = foreground,
-            modifier = Modifier.padding(top = 32.dp, bottom = 12.dp),
-            onOpenLink = onOpenLink,
-        )
+        is ReaderBlock.Heading -> {
+            val headingStyle = when (block.level) {
+                1 -> MaterialTheme.typography.headlineLarge
+                2 -> MaterialTheme.typography.headlineMedium
+                3 -> MaterialTheme.typography.headlineSmall
+                4 -> MaterialTheme.typography.titleLarge
+                5 -> MaterialTheme.typography.titleMedium
+                else -> MaterialTheme.typography.titleSmall
+            }
+            val headingText = readerAnnotatedString(block.text, foreground, link, codeBg, readerFontFamily)
+            val headingLineHeightSp = headingStyle.lineHeight.value
+            val headingTextStyle = headingStyle.copy(
+                fontFamily = readerFontFamily,
+                lineHeight = headingLineHeightSp.sp,
+            ).readerTextMetrics()
+            val textMeasurer = rememberTextMeasurer()
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { heading() },
+                contentAlignment = Alignment.Center,
+            ) {
+                val maxWidthPx = with(LocalDensity.current) { maxWidth.roundToPx() }
+                val lineCount = remember(headingText, headingTextStyle, maxWidthPx) {
+                    textMeasurer.measure(
+                        text = headingText,
+                        style = headingTextStyle,
+                        constraints = Constraints(maxWidth = maxWidthPx),
+                    ).lineCount
+                }
+                val headingUnits = ceil(
+                    lineCount * headingLineHeightSp / LocalReaderPresentation.current.bodyLineSp,
+                ).toInt().coerceAtLeast(1)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(readerLineHeightDp() * headingUnits),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ReaderText(
+                        text = headingText,
+                        style = headingTextStyle,
+                        color = foreground,
+                        modifier = Modifier.fillMaxWidth(),
+                        onOpenLink = onOpenLink,
+                        textAlign = TextAlign.Start,
+                    )
+                }
+            }
+        }
         is ReaderBlock.Paragraph -> ReaderText(
             text = readerAnnotatedString(block.text, foreground, link, codeBg, readerFontFamily),
             style = MaterialTheme.typography.bodyLarge.copy(
@@ -359,12 +416,12 @@ private fun ReaderBlockView(
                 lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
             ),
             color = foreground,
-            modifier = Modifier.padding(bottom = 22.dp),
+            modifier = Modifier.padding(bottom = readerLineHeightDp()),
             onOpenLink = onOpenLink,
         )
         is ReaderBlock.Quote -> Row(
             Modifier
-                .padding(top = 2.dp, bottom = 24.dp)
+                .padding(top = 0.dp, bottom = readerLineHeightDp())
                 .height(IntrinsicSize.Min),
         ) {
             Box(
@@ -373,7 +430,7 @@ private fun ReaderBlockView(
                     .fillMaxHeight()
                     .background(rule),
             )
-            Column(Modifier.padding(start = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.padding(start = 16.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
                 block.blocks.forEach {
                     ReaderBlockView(
                         block = it,
@@ -393,11 +450,12 @@ private fun ReaderBlockView(
             text = block.text,
             style = MaterialTheme.typography.bodyMedium.copy(
                 fontFamily = FontFamily.Monospace,
-                lineHeight = 22.sp,
-            ),
+                fontSize = LocalReaderPresentation.current.bodySp.sp,
+                lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
+            ).readerTextMetrics(),
             color = foreground,
             modifier = Modifier
-                .padding(bottom = 22.dp)
+                .padding(bottom = readerLineHeightDp())
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
                 .background(codeBg)
@@ -435,7 +493,7 @@ private fun ReaderBlockView(
             contentDescription = block.alt,
             contentScale = ContentScale.FillWidth,
             modifier = Modifier
-                .padding(bottom = 28.dp)
+                .padding(bottom = readerLineHeightDp())
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
                 .clickable { onOpenImage(block.src, block.alt) },
@@ -443,7 +501,7 @@ private fun ReaderBlockView(
         is ReaderBlock.Figure -> ReaderFigure(block, muted, link, codeBg, readerFontFamily, onOpenLink, onOpenImage)
         ReaderBlock.Divider -> HorizontalDivider(
             color = rule,
-            modifier = Modifier.padding(top = 10.dp, bottom = 32.dp),
+            modifier = Modifier.padding(top = 0.dp, bottom = readerLineHeightDp()),
         )
     }
 }
@@ -461,7 +519,7 @@ private fun ReaderTable(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 22.dp)
+            .padding(bottom = readerLineHeightDp())
             .border(1.dp, rule, RoundedCornerShape(8.dp))
             .clip(RoundedCornerShape(8.dp)),
     ) {
@@ -470,7 +528,7 @@ private fun ReaderTable(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(if (rowIndex == 0) codeBg else Color.Transparent)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = readerLineHeightDp() / 2f),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 row.forEach { cell ->
@@ -503,14 +561,14 @@ private fun ReaderFigure(
     onOpenLink: (String) -> Unit,
     onOpenImage: (src: String, alt: String?) -> Unit,
 ) {
-    Column(Modifier.padding(top = 6.dp, bottom = 28.dp)) {
+    Column(Modifier.padding(top = 0.dp, bottom = readerLineHeightDp())) {
         figure.images.forEachIndexed { index, image ->
             AsyncImage(
                 model = image.src,
                 contentDescription = image.alt,
                 contentScale = ContentScale.FillWidth,
                 modifier = Modifier
-                    .padding(bottom = if (index == figure.images.lastIndex) 0.dp else 12.dp)
+                    .padding(bottom = if (index == figure.images.lastIndex) 0.dp else readerLineHeightDp())
                     .fillMaxWidth()
                     .heightIn(min = 1.dp)
                     .clip(RoundedCornerShape(8.dp))
@@ -524,8 +582,9 @@ private fun ReaderFigure(
                     fontFamily = readerFontFamily,
                 ),
                 color = muted,
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier.padding(top = readerLineHeightDp()),
                 onOpenLink = onOpenLink,
+                textAlign = TextAlign.Start,
             )
         }
     }
@@ -601,6 +660,8 @@ private fun ReaderText(
     color: Color,
     onOpenLink: (String) -> Unit,
     modifier: Modifier = Modifier,
+    textAlign: TextAlign? = null,
+    onTextLayout: ((TextLayoutResult) -> Unit)? = null,
 ) {
     var layoutResult by remember(text) { mutableStateOf<TextLayoutResult?>(null) }
     val linkModifier = modifier.pointerInput(text) {
@@ -615,12 +676,28 @@ private fun ReaderText(
     }
     Text(
         text = text,
-        style = style.copy(textAlign = LocalReaderPresentation.current.textAlign),
+        style = style.readerTextMetrics().copy(
+            textAlign = textAlign ?: LocalReaderPresentation.current.textAlign,
+        ),
         color = color,
         modifier = linkModifier,
-        onTextLayout = { layoutResult = it },
+        onTextLayout = {
+            layoutResult = it
+            onTextLayout?.invoke(it)
+        },
     )
 }
+
+private fun TextStyle.readerTextMetrics(): TextStyle = copy(
+    // Android's legacy font padding makes the first and last line depend on font
+    // metrics rather than the declared line height. Remove it so every reader
+    // block uses the same explicit line box.
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = LineHeightStyle(
+        alignment = LineHeightStyle.Alignment.Proportional,
+        trim = LineHeightStyle.Trim.None,
+    ),
+)
 
 private val NewsreaderFontFamily = FontFamily(
     Font(
@@ -728,29 +805,44 @@ private fun ReaderList(
     onOpenLink: (String) -> Unit,
 ) {
     Column(
-        modifier = Modifier.padding(bottom = 22.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(bottom = readerLineHeightDp()),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         items.forEachIndexed { index, item ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     text = if (ordered) "${index + 1}." else "•",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontFamily = readerFontFamily, fontSize = LocalReaderPresentation.current.bodySp.sp),
-                    color = foreground,
-                )
-                ReaderText(
-                    text = readerAnnotatedString(item, foreground, link, codeBg, readerFontFamily),
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontFamily = readerFontFamily,
                         fontSize = LocalReaderPresentation.current.bodySp.sp,
                         lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
-                    ),
+                    ).readerTextMetrics(),
                     color = foreground,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.alignBy(FirstBaseline),
+                )
+                ReaderText(
+                    text = readerAnnotatedString(item, foreground, link, codeBg, readerFontFamily),
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontFamily = readerFontFamily,
+                            fontSize = LocalReaderPresentation.current.bodySp.sp,
+                            lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
+                        ).readerTextMetrics(),
+                    color = foreground,
+                    modifier = Modifier
+                        .weight(1f)
+                        .alignBy(FirstBaseline),
                     onOpenLink = onOpenLink,
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun readerLineHeightDp(): androidx.compose.ui.unit.Dp {
+    val lineHeight = LocalReaderPresentation.current.bodyLineSp
+    return with(LocalDensity.current) {
+        lineHeight.sp.toDp()
     }
 }
 
@@ -796,6 +888,7 @@ internal fun TextPost(
     val background = remember(palette) { Color(android.graphics.Color.parseColor(palette.background)) }
     val foreground = remember(palette) { Color(android.graphics.Color.parseColor(palette.foreground)) }
     val muted = remember(palette) { Color(android.graphics.Color.parseColor(palette.muted)) }
+    val rule = remember(palette) { Color(android.graphics.Color.parseColor(palette.rule)) }
     val readerFontFamily = readerFont.fontFamily
     val latestOnScroll by androidx.compose.runtime.rememberUpdatedState(onScroll)
     LaunchedEffect(listState) {
@@ -807,28 +900,32 @@ internal fun TextPost(
         SelectionContainer {
             LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().background(background),
-            contentPadding = PaddingValues(start = 24.dp, top = topPad, end = 24.dp, bottom = 72.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(background),
+            contentPadding = PaddingValues(start = 16.dp, top = topPad, end = 16.dp, bottom = 72.dp),
         ) {
             item(key = "text-post") {
-                ReaderMeasure(modifier = Modifier.padding(top = 8.dp, bottom = 32.dp)) {
+                ReaderMeasure(modifier = Modifier.padding(top = 0.dp, bottom = readerLineHeightDp())) {
                     Text(
                         text = story.title,
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontFamily = readerFontFamily,
-                            fontWeight = FontWeight.Bold,
-                        ),
+                            lineHeight = MaterialTheme.typography.headlineMedium.lineHeight,
+                        ).readerTextMetrics(),
                         color = foreground,
-                        textAlign = LocalReaderPresentation.current.textAlign,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.semantics { heading() },
                     )
                     Text(
                         text = story.by,
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontFamily = readerFontFamily,
-                        ),
+                            lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
+                        ).readerTextMetrics(),
                         color = muted,
-                        textAlign = LocalReaderPresentation.current.textAlign,
-                        modifier = Modifier.padding(top = 4.dp),
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.padding(top = 0.dp),
                     )
                     story.text?.takeIf { it.isNotBlank() }?.let { text ->
                         Text(
@@ -837,7 +934,7 @@ internal fun TextPost(
                                 fontFamily = readerFontFamily,
                                 fontSize = LocalReaderPresentation.current.bodySp.sp,
                                 lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
-                            ),
+                            ).readerTextMetrics(),
                             color = foreground,
                             textAlign = LocalReaderPresentation.current.textAlign,
                             modifier = Modifier.padding(top = 32.dp),

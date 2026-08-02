@@ -21,7 +21,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.FormatAlignLeft
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.FormatAlignJustify
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,7 +49,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shapeshed.kiosk.R
 import com.shapeshed.kiosk.data.ReaderFont
-import com.shapeshed.kiosk.data.ReaderAlignment
 import com.shapeshed.kiosk.data.ReaderFontSize
 import com.shapeshed.kiosk.data.ReaderLineSpacing
 import com.shapeshed.kiosk.data.ReaderWidth
@@ -60,13 +61,13 @@ internal fun AppearanceSheet(
     current: ReaderTheme,
     currentFont: ReaderFont,
     currentFontSize: ReaderFontSize,
-    currentAlignment: ReaderAlignment,
+    currentJustify: Boolean,
     currentLineSpacing: ReaderLineSpacing,
     currentWidth: ReaderWidth,
     onSelectTheme: (ReaderTheme) -> Unit,
     onSelectFont: (ReaderFont) -> Unit,
     onSelectFontSize: (ReaderFontSize) -> Unit,
-    onSelectAlignment: (ReaderAlignment) -> Unit,
+    onSelectJustify: (Boolean) -> Unit,
     onSelectLineSpacing: (ReaderLineSpacing) -> Unit,
     onSelectWidth: (ReaderWidth) -> Unit,
     onDismiss: () -> Unit,
@@ -83,10 +84,14 @@ internal fun AppearanceSheet(
             val pagerState = rememberPagerState(pageCount = { 2 })
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(220.dp),
                 pageSpacing = 20.dp,
+                overscrollEffect = null,
             ) { page ->
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().height(220.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     when (page) {
                         0 -> {
                             SettingLabel("Theme")
@@ -103,12 +108,12 @@ internal fun AppearanceSheet(
                             }
                             SettingLabel("Font")
                             FontPicker(current = currentFont, onSelect = onSelectFont)
-                            StepperRow("Size", ReaderFontSize.entries, currentFontSize, onSelectFontSize) { it.name.lowercase().replaceFirstChar(Char::uppercase) }
+                            StepperRow("Font size", ReaderFontSize.entries, currentFontSize, onSelectFontSize, Icons.Rounded.Remove, Icons.Rounded.Add)
                         }
                         else -> {
-                            StepperRow("Align", ReaderAlignment.entries, currentAlignment, onSelectAlignment) { if (it == ReaderAlignment.LEFT) "Left" else "Justify" }
-                            StepperRow("Spacing", ReaderLineSpacing.entries, currentLineSpacing, onSelectLineSpacing) { if (it == ReaderLineSpacing.COMPACT) "Compact" else "Relaxed" }
-                            StepperRow("Width", ReaderWidth.entries, currentWidth, onSelectWidth) { if (it == ReaderWidth.NARROW) "Narrow" else "Wide" }
+                            IconOptionRow("Justify text", currentJustify, false, true, onSelectJustify, Icons.AutoMirrored.Rounded.FormatAlignLeft, Icons.Rounded.FormatAlignJustify)
+                            StepperRow("Line height", ReaderLineSpacing.entries, currentLineSpacing, onSelectLineSpacing, Icons.Rounded.Remove, Icons.Rounded.Add)
+                            StepperRow("Page margins", ReaderWidth.entries, currentWidth, onSelectWidth, Icons.Rounded.Remove, Icons.Rounded.Add)
                         }
                     }
                 }
@@ -179,30 +184,13 @@ private fun SettingLabel(text: String) {
 }
 
 @Composable
-private fun AppearanceOptions(
-    currentFontSize: ReaderFontSize,
-    currentAlignment: ReaderAlignment,
-    currentLineSpacing: ReaderLineSpacing,
-    currentWidth: ReaderWidth,
-    onSelectFontSize: (ReaderFontSize) -> Unit,
-    onSelectAlignment: (ReaderAlignment) -> Unit,
-    onSelectLineSpacing: (ReaderLineSpacing) -> Unit,
-    onSelectWidth: (ReaderWidth) -> Unit,
-) {
-    Text("Reader layout", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
-    StepperRow("Size", ReaderFontSize.entries, currentFontSize, onSelectFontSize) { it.name.lowercase().replaceFirstChar(Char::uppercase) }
-    OptionRow("Align", ReaderAlignment.entries, currentAlignment, onSelectAlignment) { if (it == ReaderAlignment.LEFT) "Left" else "Justify" }
-    StepperRow("Spacing", ReaderLineSpacing.entries, currentLineSpacing, onSelectLineSpacing) { if (it == ReaderLineSpacing.COMPACT) "Compact" else "Relaxed" }
-    StepperRow("Width", ReaderWidth.entries, currentWidth, onSelectWidth) { if (it == ReaderWidth.NARROW) "Narrow" else "Wide" }
-}
-
-@Composable
 private fun <T> StepperRow(
     label: String,
     options: List<T>,
     selected: T,
     onSelect: (T) -> Unit,
-    optionLabel: (T) -> String,
+    decrementIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    incrementIcon: androidx.compose.ui.graphics.vector.ImageVector,
 ) {
     val index = options.indexOf(selected).coerceAtLeast(0)
     Row(
@@ -212,12 +200,50 @@ private fun <T> StepperRow(
     ) {
         Text(label, style = MaterialTheme.typography.labelLarge)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(enabled = index > 0, onClick = { onSelect(options[index - 1]) }) {
-                Icon(Icons.Rounded.Remove, contentDescription = "Decrease $label")
+            androidx.compose.material3.FilledTonalIconButton(enabled = index > 0, onClick = { onSelect(options[index - 1]) }) {
+                Icon(decrementIcon, contentDescription = "Decrease $label")
             }
-            Text(optionLabel(selected), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 8.dp))
-            IconButton(enabled = index < options.lastIndex, onClick = { onSelect(options[index + 1]) }) {
-                Icon(Icons.Rounded.Add, contentDescription = "Increase $label")
+            androidx.compose.material3.FilledTonalIconButton(enabled = index < options.lastIndex, onClick = { onSelect(options[index + 1]) }) {
+                Icon(incrementIcon, contentDescription = "Increase $label")
+            }
+        }
+    }
+}
+
+@Composable
+private fun <T> IconOptionRow(
+    label: String,
+    selected: T,
+    first: T,
+    second: T,
+    onSelect: (T) -> Unit,
+    firstIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    secondIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            leadingIcon?.let { Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Text(label, style = MaterialTheme.typography.labelLarge)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(first to firstIcon, second to secondIcon).forEach { (option, icon) ->
+                Surface(
+                    onClick = { onSelect(option) },
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (selected == option) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = if (selected == option) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                ) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
             }
         }
     }

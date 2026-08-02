@@ -77,7 +77,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shapeshed.kiosk.KioskApp
 import com.shapeshed.kiosk.R
 import com.shapeshed.kiosk.data.ReaderFont
-import com.shapeshed.kiosk.data.ReaderAlignment
 import com.shapeshed.kiosk.data.ReaderFontSize
 import com.shapeshed.kiosk.data.ReaderLineSpacing
 import com.shapeshed.kiosk.data.ReaderWidth
@@ -138,8 +137,8 @@ fun ArticleScreen(
     val readerTheme by app.settings.readerTheme.collectAsStateWithLifecycle(ReaderTheme.SYSTEM)
     val readerFont by app.settings.readerFont.collectAsStateWithLifecycle(ReaderFont.NEWSREADER)
     val readerFontSize by app.settings.readerFontSize.collectAsStateWithLifecycle(ReaderFontSize.MEDIUM)
-    val readerAlignment by app.settings.readerAlignment.collectAsStateWithLifecycle(ReaderAlignment.LEFT)
-    val readerLineSpacing by app.settings.readerLineSpacing.collectAsStateWithLifecycle(ReaderLineSpacing.RELAXED)
+    val readerJustify by app.settings.readerJustify.collectAsStateWithLifecycle(false)
+    val readerLineSpacing by app.settings.readerLineSpacing.collectAsStateWithLifecycle(ReaderLineSpacing.STANDARD)
     val readerWidth by app.settings.readerWidth.collectAsStateWithLifecycle(ReaderWidth.WIDE)
     val readAloudSpeechRate by app.settings.readAloudSpeechRate.collectAsStateWithLifecycle(1f)
     val readAloudVoiceName by app.settings.readAloudVoiceName.collectAsStateWithLifecycle(null)
@@ -152,8 +151,9 @@ fun ArticleScreen(
     // Reader content sits below the overlay bar: pad the top by status-bar + app-bar height (CSS
     // px ≈ dp). The bar only hides after scrolling down, so by then this padding is off-screen.
     val density = LocalDensity.current
-    // status-bar/notch height (dp) + app-bar (64dp) + a comfortable gap.
-    val readerTopPad = (WindowInsets.statusBarsIgnoringVisibility.getTop(density) / density.density).toInt() + 88
+    // status-bar/notch height (dp) + app-bar (64dp). The reader's first line-height supplies
+    // the breathing room below the bar.
+    val readerTopPad = (WindowInsets.statusBarsIgnoringVisibility.getTop(density) / density.density).toInt() + 64
 
     // Kiosk is reader-first: WebView exists only as a hidden Readability extraction tool. Failure is
     // shared (see ReaderExtractionFailures) since only the outermost instance ever runs it, but every
@@ -314,7 +314,7 @@ fun ArticleScreen(
                     story = story,
                     palette = palette,
                     readerFont = readerFont,
-                    presentation = ReaderPresentation(readerFontSize, readerAlignment, readerLineSpacing, readerWidth),
+                    presentation = ReaderPresentation(readerFontSize, readerJustify, readerLineSpacing, readerWidth),
                     listState = nativeReaderListState,
                     topPad = readerTopPad.dp,
                     onScroll = { scrollY ->
@@ -352,7 +352,7 @@ fun ArticleScreen(
                             article = readyNativeReaderArticle,
                             palette = palette,
                             readerFont = readerFont,
-                            presentation = ReaderPresentation(readerFontSize, readerAlignment, readerLineSpacing, readerWidth),
+                    presentation = ReaderPresentation(readerFontSize, readerJustify, readerLineSpacing, readerWidth),
                             listState = nativeReaderListState,
                             topPad = readerTopPad.dp,
                             activeReadAloudBlockIndex = externalReadAloudBlockIndex ?: currentReadAloudBlockIndex,
@@ -788,13 +788,13 @@ fun ArticleScreen(
             current = readerTheme,
             currentFont = readerFont,
             currentFontSize = readerFontSize,
-            currentAlignment = readerAlignment,
+            currentJustify = readerJustify,
             currentLineSpacing = readerLineSpacing,
             currentWidth = readerWidth,
             onSelectTheme = { scope.launch { app.settings.setReaderTheme(it) } },
             onSelectFont = { scope.launch { app.settings.setReaderFont(it) } },
             onSelectFontSize = { scope.launch { app.settings.setReaderFontSize(it) } },
-            onSelectAlignment = { scope.launch { app.settings.setReaderAlignment(it) } },
+            onSelectJustify = { scope.launch { app.settings.setReaderJustify(it) } },
             onSelectLineSpacing = { scope.launch { app.settings.setReaderLineSpacing(it) } },
             onSelectWidth = { scope.launch { app.settings.setReaderWidth(it) } },
             onDismiss = { showAppearance = false },
