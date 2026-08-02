@@ -77,6 +77,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shapeshed.kiosk.KioskApp
 import com.shapeshed.kiosk.R
 import com.shapeshed.kiosk.data.ReaderFont
+import com.shapeshed.kiosk.data.ReaderAlignment
+import com.shapeshed.kiosk.data.ReaderFontSize
+import com.shapeshed.kiosk.data.ReaderLineSpacing
+import com.shapeshed.kiosk.data.ReaderWidth
 import com.shapeshed.kiosk.data.ReaderTheme
 import com.shapeshed.kiosk.data.Story
 import com.shapeshed.kiosk.data.hostOf
@@ -133,6 +137,10 @@ fun ArticleScreen(
     val scope = rememberCoroutineScope()
     val readerTheme by app.settings.readerTheme.collectAsStateWithLifecycle(ReaderTheme.SYSTEM)
     val readerFont by app.settings.readerFont.collectAsStateWithLifecycle(ReaderFont.NEWSREADER)
+    val readerFontSize by app.settings.readerFontSize.collectAsStateWithLifecycle(ReaderFontSize.MEDIUM)
+    val readerAlignment by app.settings.readerAlignment.collectAsStateWithLifecycle(ReaderAlignment.LEFT)
+    val readerLineSpacing by app.settings.readerLineSpacing.collectAsStateWithLifecycle(ReaderLineSpacing.RELAXED)
+    val readerWidth by app.settings.readerWidth.collectAsStateWithLifecycle(ReaderWidth.WIDE)
     val readAloudSpeechRate by app.settings.readAloudSpeechRate.collectAsStateWithLifecycle(1f)
     val readAloudVoiceName by app.settings.readAloudVoiceName.collectAsStateWithLifecycle(null)
     val speedReaderWordsPerMinute by app.settings.speedReaderWordsPerMinute.collectAsStateWithLifecycle(350)
@@ -306,6 +314,7 @@ fun ArticleScreen(
                     story = story,
                     palette = palette,
                     readerFont = readerFont,
+                    presentation = ReaderPresentation(readerFontSize, readerAlignment, readerLineSpacing, readerWidth),
                     listState = nativeReaderListState,
                     topPad = readerTopPad.dp,
                     onScroll = { scrollY ->
@@ -343,6 +352,7 @@ fun ArticleScreen(
                             article = readyNativeReaderArticle,
                             palette = palette,
                             readerFont = readerFont,
+                            presentation = ReaderPresentation(readerFontSize, readerAlignment, readerLineSpacing, readerWidth),
                             listState = nativeReaderListState,
                             topPad = readerTopPad.dp,
                             activeReadAloudBlockIndex = externalReadAloudBlockIndex ?: currentReadAloudBlockIndex,
@@ -777,8 +787,16 @@ fun ArticleScreen(
         AppearanceSheet(
             current = readerTheme,
             currentFont = readerFont,
+            currentFontSize = readerFontSize,
+            currentAlignment = readerAlignment,
+            currentLineSpacing = readerLineSpacing,
+            currentWidth = readerWidth,
             onSelectTheme = { scope.launch { app.settings.setReaderTheme(it) } },
             onSelectFont = { scope.launch { app.settings.setReaderFont(it) } },
+            onSelectFontSize = { scope.launch { app.settings.setReaderFontSize(it) } },
+            onSelectAlignment = { scope.launch { app.settings.setReaderAlignment(it) } },
+            onSelectLineSpacing = { scope.launch { app.settings.setReaderLineSpacing(it) } },
+            onSelectWidth = { scope.launch { app.settings.setReaderWidth(it) } },
             onDismiss = { showAppearance = false },
         )
     }
