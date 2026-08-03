@@ -124,6 +124,7 @@ class ReaderDocumentTest {
         ).blocks.single() as ReaderBlock.Table
 
         assertEquals(2, table.rows.size)
+        assertEquals(setOf(0), table.headerRows)
         assertEquals(listOf("Language", "Score"), table.rows[0].map { cell -> cell.joinToString("") { it.text } })
         assertEquals(listOf("Kotlin", "10"), table.rows[1].map { cell -> cell.joinToString("") { it.text } })
     }
@@ -145,6 +146,7 @@ class ReaderDocumentTest {
         assertEquals("Definition", definitions.items.single().descriptions.single().joinToString("") { it.text })
         val table = blocks[1] as ReaderBlock.Table
         assertEquals("Results", table.caption?.joinToString("") { it.text })
+        assertEquals(setOf(0), table.headerRows)
     }
 
     @Test

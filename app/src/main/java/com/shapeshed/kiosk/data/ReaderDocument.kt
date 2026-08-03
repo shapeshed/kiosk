@@ -24,6 +24,7 @@ sealed interface ReaderBlock {
     data class Table(
         val rows: List<List<List<ReaderInline>>>,
         val caption: List<ReaderInline>? = null,
+        val headerRows: Set<Int> = emptySet(),
     ) : ReaderBlock
     data class Image(val src: String, val alt: String?) : ReaderBlock
     data class Figure(val images: List<Image>, val caption: List<ReaderInline>?) : ReaderBlock
@@ -212,17 +213,23 @@ private fun parseDefinitionList(element: Element): List<DefinitionItem>? {
 }
 
 private fun parseTable(element: Element): ReaderBlock.Table? {
-    val rows = element.select("tr").mapNotNull { row ->
+    val parsedRows = element.select("tr").mapNotNull { row ->
         val cells = row.children()
             .filter { it.normalName() == "th" || it.normalName() == "td" }
             .map(::inlineText)
         cells.takeIf { it.isNotEmpty() && it.any { cell -> cell.isNotEmpty() } }
+            ?.let { it to row.children().any { cell -> cell.normalName() == "th" } }
     }
+    val rows = parsedRows.map { it.first }
+    val headerRows = parsedRows.mapIndexedNotNull { index, (_, hasHeaderCell) ->
+        index.takeIf { hasHeaderCell }
+    }.toSet()
     val caption = element.children()
         .firstOrNull { it.normalName() == "caption" && !it.isHiddenFromReader() }
         ?.let(::inlineText)
         ?.toParagraphTextOrNull()
-    return rows.takeIf { it.isNotEmpty() }?.let { ReaderBlock.Table(rows = it, caption = caption) }
+    return rows.takeIf { it.isNotEmpty() }
+        ?.let { ReaderBlock.Table(rows = it, caption = caption, headerRows = headerRows) }
 }
 
 private fun inlineText(element: Element): List<ReaderInline> =

@@ -449,7 +449,9 @@ private fun ReaderBlockView(
         )
         is ReaderBlock.Quote -> Row(
             Modifier
-                .padding(top = 0.dp, bottom = readerLineHeightDp())
+                // Child blocks provide the quote's trailing line-height; adding one here
+                // would leave an unintended blank line after the quotation.
+                .padding(top = 0.dp)
                 .height(IntrinsicSize.Min),
         ) {
             Box(
@@ -525,6 +527,7 @@ private fun ReaderBlockView(
         is ReaderBlock.Table -> ReaderTable(
             rows = block.rows,
             caption = block.caption,
+            headerRows = block.headerRows,
             foreground = foreground,
             link = link,
             rule = rule,
@@ -554,6 +557,7 @@ private fun ReaderBlockView(
 private fun ReaderTable(
     rows: List<List<List<ReaderInline>>>,
     caption: List<ReaderInline>?,
+    headerRows: Set<Int>,
     foreground: Color,
     link: Color,
     rule: Color,
@@ -591,9 +595,10 @@ private fun ReaderTable(
                     .horizontalScroll(tableScrollState),
             ) {
                 rows.forEachIndexed { rowIndex, row ->
+                    val isHeader = rowIndex in headerRows
                     Row(
                         modifier = Modifier
-                            .background(if (rowIndex == 0) codeBg else Color.Transparent)
+                            .background(if (isHeader) foreground.copy(alpha = 0.08f) else Color.Transparent)
                             .padding(horizontal = 12.dp, vertical = readerLineHeightDp() / 2f),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
@@ -604,7 +609,7 @@ private fun ReaderTable(
                                     fontFamily = readerFontFamily,
                                     fontSize = LocalReaderPresentation.current.bodySp.sp,
                                     lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
-                                    fontWeight = if (rowIndex == 0) FontWeight.Bold else FontWeight.Normal,
+                                    fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal,
                                 ),
                                 color = foreground,
                                 modifier = Modifier.width(tableColumnWidth),
