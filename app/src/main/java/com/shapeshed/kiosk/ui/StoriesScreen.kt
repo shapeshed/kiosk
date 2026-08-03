@@ -62,6 +62,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -417,6 +418,7 @@ private fun FeedPane(
                         selectedStoryId = selectedStoryId,
                         viewedIds = viewedIds,
                         loadingMore = loadingMore,
+                        refreshing = refreshing,
                         refreshGeneration = refreshGeneration,
                         onLoadMore = viewModel::loadMore,
                         onOpenStory = { id ->
@@ -437,13 +439,17 @@ private fun StoryList(
     selectedStoryId: Long?,
     viewedIds: Set<Long>,
     loadingMore: Boolean,
+    refreshing: Boolean = false,
     refreshGeneration: Int = 0,
     onLoadMore: () -> Unit,
     onOpenStory: (Long) -> Unit,
 ) {
     val listState = rememberLazyListState()
-    LaunchedEffect(refreshGeneration) {
-        if (refreshGeneration > 0) listState.animateScrollToItem(0)
+    LaunchedEffect(refreshGeneration, refreshing) {
+        if (refreshGeneration > 0 && !refreshing) {
+            withFrameNanos { }
+            listState.scrollToItem(0)
+        }
     }
     // Load the next page once the last few rows come into view.
     val nearEnd by remember {

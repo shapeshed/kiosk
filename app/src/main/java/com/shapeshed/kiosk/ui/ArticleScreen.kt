@@ -140,7 +140,7 @@ fun ArticleScreen(
     val readerFontSizeExplicit by app.settings.readerFontSizeExplicit.collectAsStateWithLifecycle(false)
     val readerJustify by app.settings.readerJustify.collectAsStateWithLifecycle(false)
     val readerLineSpacing by app.settings.readerLineSpacing.collectAsStateWithLifecycle(ReaderLineSpacing.STANDARD)
-    val readerWidth by app.settings.readerWidth.collectAsStateWithLifecycle(ReaderWidth.WIDE)
+    val readerWidth by app.settings.readerWidth.collectAsStateWithLifecycle(ReaderWidth.MEDIUM)
     val readAloudSpeechRate by app.settings.readAloudSpeechRate.collectAsStateWithLifecycle(1f)
     val readAloudVoiceName by app.settings.readAloudVoiceName.collectAsStateWithLifecycle(null)
     val speedReaderWordsPerMinute by app.settings.speedReaderWordsPerMinute.collectAsStateWithLifecycle(350)

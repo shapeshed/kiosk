@@ -31,7 +31,7 @@ enum class ReaderFontSize(val sizeSp: Float, val lineHeightSp: Float) {
 /** Line-height adjustments around the Material 3 baseline for each reader size. */
 enum class ReaderLineSpacing(val multiplier: Float) { COMPACT(0.9f), STANDARD(1f), RELAXED(1.15f) }
 /** Additional horizontal page margin in dp. */
-enum class ReaderWidth(val marginDp: Int) { WIDE(0), MEDIUM(16), NARROW(32) }
+enum class ReaderWidth(val marginDp: Int) { WIDE(0), MEDIUM(8), NARROW(16), EXTRA_NARROW(24) }
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -112,7 +112,7 @@ class SettingsStore(private val context: Context) {
     suspend fun setReaderLineSpacing(spacing: ReaderLineSpacing) { context.dataStore.edit { it[readerLineSpacingKey] = spacing.name } }
 
     val readerWidth: Flow<ReaderWidth> = context.dataStore.data.map { prefs ->
-        prefs[readerWidthKey]?.let { runCatching { ReaderWidth.valueOf(it) }.getOrNull() } ?: ReaderWidth.WIDE
+        prefs[readerWidthKey]?.let { runCatching { ReaderWidth.valueOf(it) }.getOrNull() } ?: ReaderWidth.MEDIUM
     }
 
     suspend fun setReaderWidth(width: ReaderWidth) { context.dataStore.edit { it[readerWidthKey] = width.name } }

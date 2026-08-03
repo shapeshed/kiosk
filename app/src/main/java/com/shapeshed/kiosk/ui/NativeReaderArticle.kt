@@ -97,7 +97,7 @@ internal data class ReaderPresentation(
     val fontSize: ReaderFontSize = ReaderFontSize.MEDIUM,
     val justify: Boolean = false,
     val lineSpacing: ReaderLineSpacing = ReaderLineSpacing.STANDARD,
-    val width: ReaderWidth = ReaderWidth.WIDE,
+    val width: ReaderWidth = ReaderWidth.MEDIUM,
 ) {
     // These pairs mirror Material 3's body type scale: 12/16, 14/20, 16/24, 18/28, and 22/28.
     val bodySp: Float get() = fontSize.sizeSp
