@@ -472,7 +472,7 @@ private fun ReaderBlockView(
                     block.blocks.forEachIndexed { index, child ->
                         ReaderBlockView(
                             block = child,
-                            foreground = muted,
+                            foreground = foreground,
                             muted = muted,
                             link = link,
                             rule = rule,
