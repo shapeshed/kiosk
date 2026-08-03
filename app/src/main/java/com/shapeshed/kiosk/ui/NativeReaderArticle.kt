@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -49,6 +48,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -448,18 +449,25 @@ private fun ReaderBlockView(
             modifier = Modifier.padding(bottom = if (suppressTrailingSpacing) 0.dp else readerLineHeightDp()),
             onOpenLink = onOpenLink,
         )
-        is ReaderBlock.Quote -> Row(
+        is ReaderBlock.Quote -> Column(
             Modifier
-                .padding(top = 0.dp, bottom = readerLineHeightDp())
-                .height(IntrinsicSize.Min),
+                .fillMaxWidth()
+                .padding(bottom = readerLineHeightDp()),
         ) {
             Box(
                 Modifier
-                    .width(3.dp)
-                    .fillMaxHeight()
-                    .background(rule),
-            )
-            Column(Modifier.padding(start = 16.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    .fillMaxWidth()
+                    .drawBehind {
+                        val strokeWidth = 3.dp.toPx()
+                        drawLine(
+                            color = rule,
+                            start = Offset(strokeWidth / 2f, 0f),
+                            end = Offset(strokeWidth / 2f, size.height),
+                            strokeWidth = strokeWidth,
+                        )
+                    }
+                    .padding(start = 16.dp),
+            ) {
                 block.blocks.forEachIndexed { index, child ->
                     ReaderBlockView(
                         block = child,
