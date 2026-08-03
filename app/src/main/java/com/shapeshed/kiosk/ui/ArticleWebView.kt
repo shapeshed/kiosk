@@ -32,7 +32,12 @@ import com.shapeshed.kiosk.data.ReaderExtractionEntity
 import com.shapeshed.kiosk.data.Story
 import org.json.JSONObject
 import org.json.JSONTokener
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 import kotlin.math.abs
+
+private const val READABILITY_EXTRACTION_TIMEOUT_MS = 10_000L
 
 // Clone the page, run Readability on it, and hand back {t: title, c: contentHtml, x: textContent,
 // og: social image url} — or "" on failure. The image is read from the live document (not the clone
@@ -182,10 +187,19 @@ internal fun ArticleWebView(
     LaunchedEffect(pageReady) {
         if (pageReady) {
             val webView = holder.webView ?: return@LaunchedEffect
-            webView.evaluateJavascript(EXTRACT_JS) { raw ->
-                if (holder.destroyed || holder.webView !== webView) return@evaluateJavascript
-                val parsed = parseExtraction(raw)
-                if (parsed != null) onExtracted(parsed) else onExtractionFailed()
+            val raw = withTimeoutOrNull(READABILITY_EXTRACTION_TIMEOUT_MS) {
+                suspendCancellableCoroutine { continuation ->
+                    webView.evaluateJavascript(EXTRACT_JS) { result ->
+                        if (continuation.isActive) continuation.resume(result)
+                    }
+                }
+            }
+            if (holder.destroyed || holder.webView !== webView) return@LaunchedEffect
+            val parsed = raw?.let(::parseExtraction)
+            if (parsed != null) {
+                onExtracted(parsed)
+            } else {
+                onExtractionFailed()
             }
         }
     }
