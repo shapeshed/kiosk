@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -42,6 +43,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -488,7 +490,10 @@ private fun ReaderBlockView(
                     lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
                 ).readerTextMetrics(),
                 color = foreground,
-                modifier = Modifier.padding(12.dp),
+                softWrap = false,
+                modifier = Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(12.dp),
             )
         }
         is ReaderBlock.BulletedList -> ReaderList(
@@ -556,6 +561,9 @@ private fun ReaderTable(
     readerFontFamily: FontFamily,
     onOpenLink: (String) -> Unit,
 ) {
+    val tableScrollState = rememberScrollState()
+    val tableColumnWidth = 140.dp
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -576,11 +584,15 @@ private fun ReaderTable(
             contentColor = foreground,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(Modifier.border(1.dp, rule, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp))) {
+            Column(
+                Modifier
+                    .border(1.dp, rule, RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(8.dp))
+                    .horizontalScroll(tableScrollState),
+            ) {
                 rows.forEachIndexed { rowIndex, row ->
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
                             .background(if (rowIndex == 0) codeBg else Color.Transparent)
                             .padding(horizontal = 12.dp, vertical = readerLineHeightDp() / 2f),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -595,7 +607,7 @@ private fun ReaderTable(
                                     fontWeight = if (rowIndex == 0) FontWeight.Bold else FontWeight.Normal,
                                 ),
                                 color = foreground,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.width(tableColumnWidth),
                                 onOpenLink = onOpenLink,
                             )
                         }
