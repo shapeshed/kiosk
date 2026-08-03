@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -74,6 +75,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Constraints
 import coil3.compose.AsyncImage
@@ -82,6 +84,8 @@ import com.shapeshed.kiosk.data.ReaderArticle
 import com.shapeshed.kiosk.data.ReaderBlock
 import com.shapeshed.kiosk.data.ReaderFont
 import com.shapeshed.kiosk.data.ReaderInline
+import com.shapeshed.kiosk.data.ReaderScript
+import com.shapeshed.kiosk.data.DefinitionItem
 import com.shapeshed.kiosk.data.ReaderFontSize
 import com.shapeshed.kiosk.data.ReaderLineSpacing
 import com.shapeshed.kiosk.data.ReaderWidth
@@ -130,13 +134,33 @@ internal fun rememberReaderFontFaceCss(readerFont: ReaderFont): String {
                 ),
                 readBytes = { resId -> context.resources.openRawResource(resId).use { it.readBytes() } },
             )
-            ReaderFont.ATKINSON -> buildRawResourceFontFaceCss(
+            ReaderFont.SOURCE_SERIF_4 -> buildRawResourceFontFaceCss(
                 family = readerFont.cssFamily,
                 fonts = listOf(
-                    RawReaderFont(R.font.atkinson_hyperlegible_regular, weight = 400),
-                    RawReaderFont(R.font.atkinson_hyperlegible_bold, weight = 700),
-                    RawReaderFont(R.font.atkinson_hyperlegible_italic, weight = 400, style = "italic"),
-                    RawReaderFont(R.font.atkinson_hyperlegible_bold_italic, weight = 700, style = "italic"),
+                    RawReaderFont(R.font.source_serif_4_regular, weight = 400),
+                    RawReaderFont(R.font.source_serif_4_bold, weight = 700),
+                    RawReaderFont(R.font.source_serif_4_italic, weight = 400, style = "italic"),
+                    RawReaderFont(R.font.source_serif_4_bold_italic, weight = 700, style = "italic"),
+                ),
+                readBytes = { resId -> context.resources.openRawResource(resId).use { it.readBytes() } },
+            )
+            ReaderFont.ATKINSON_NEXT -> buildRawResourceFontFaceCss(
+                family = readerFont.cssFamily,
+                fonts = listOf(
+                    RawReaderFont(R.font.atkinson_hyperlegible_next_regular, weight = 400),
+                    RawReaderFont(R.font.atkinson_hyperlegible_next_bold, weight = 700),
+                    RawReaderFont(R.font.atkinson_hyperlegible_next_italic, weight = 400, style = "italic"),
+                    RawReaderFont(R.font.atkinson_hyperlegible_next_bold_italic, weight = 700, style = "italic"),
+                ),
+                readBytes = { resId -> context.resources.openRawResource(resId).use { it.readBytes() } },
+            )
+            ReaderFont.INTER -> buildRawResourceFontFaceCss(
+                family = readerFont.cssFamily,
+                fonts = listOf(
+                    RawReaderFont(R.font.inter_regular, weight = 400),
+                    RawReaderFont(R.font.inter_bold, weight = 700),
+                    RawReaderFont(R.font.inter_italic, weight = 400, style = "italic"),
+                    RawReaderFont(R.font.inter_bold_italic, weight = 700, style = "italic"),
                 ),
                 readBytes = { resId -> context.resources.openRawResource(resId).use { it.readBytes() } },
             )
@@ -252,7 +276,9 @@ internal fun NativeReaderArticle(
                             ).readerTextMetrics(),
                             color = foreground,
                             textAlign = TextAlign.Start,
-                            modifier = Modifier.semantics { heading() },
+                            modifier = Modifier
+                                .padding(top = 32.dp)
+                                .semantics { heading() },
                         )
                     }
                     article.source?.let {
@@ -446,21 +472,25 @@ private fun ReaderBlockView(
                 }
             }
         }
-        is ReaderBlock.CodeBlock -> Text(
-            text = block.text,
-            style = MaterialTheme.typography.bodyMedium.copy(
-                fontFamily = FontFamily.Monospace,
-                fontSize = LocalReaderPresentation.current.bodySp.sp,
-                lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
-            ).readerTextMetrics(),
-            color = foreground,
+        is ReaderBlock.CodeBlock -> Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = codeBg,
+            contentColor = foreground,
             modifier = Modifier
                 .padding(bottom = readerLineHeightDp())
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(codeBg)
-                .padding(12.dp),
-        )
+                .fillMaxWidth(),
+        ) {
+            Text(
+                text = block.text,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                    lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
+                ).readerTextMetrics(),
+                color = foreground,
+                modifier = Modifier.padding(12.dp),
+            )
+        }
         is ReaderBlock.BulletedList -> ReaderList(
             items = block.items,
             ordered = false,
@@ -479,8 +509,17 @@ private fun ReaderBlockView(
             readerFontFamily = readerFontFamily,
             onOpenLink = onOpenLink,
         )
+        is ReaderBlock.DefinitionList -> ReaderDefinitionList(
+            items = block.items,
+            foreground = foreground,
+            link = link,
+            codeBg = codeBg,
+            readerFontFamily = readerFontFamily,
+            onOpenLink = onOpenLink,
+        )
         is ReaderBlock.Table -> ReaderTable(
             rows = block.rows,
+            caption = block.caption,
             foreground = foreground,
             link = link,
             rule = rule,
@@ -509,6 +548,7 @@ private fun ReaderBlockView(
 @Composable
 private fun ReaderTable(
     rows: List<List<List<ReaderInline>>>,
+    caption: List<ReaderInline>?,
     foreground: Color,
     link: Color,
     rule: Color,
@@ -519,34 +559,50 @@ private fun ReaderTable(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = readerLineHeightDp())
-            .border(1.dp, rule, RoundedCornerShape(8.dp))
-            .clip(RoundedCornerShape(8.dp)),
+            .padding(bottom = readerLineHeightDp()),
     ) {
-        rows.forEachIndexed { rowIndex, row ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(if (rowIndex == 0) codeBg else Color.Transparent)
-                    .padding(horizontal = 12.dp, vertical = readerLineHeightDp() / 2f),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                row.forEach { cell ->
-                    ReaderText(
-                        text = readerAnnotatedString(cell, foreground, link, codeBg, readerFontFamily),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontFamily = readerFontFamily,
-                            fontSize = LocalReaderPresentation.current.bodySp.sp,
-                            lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
-                            fontWeight = if (rowIndex == 0) FontWeight.Bold else FontWeight.Normal,
-                        ),
-                        color = foreground,
-                        modifier = Modifier.weight(1f),
-                        onOpenLink = onOpenLink,
-                    )
+        caption?.let {
+            ReaderText(
+                text = readerAnnotatedString(it, foreground, link, codeBg, readerFontFamily),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = readerFontFamily),
+                color = foreground,
+                modifier = Modifier.padding(bottom = readerLineHeightDp()),
+                onOpenLink = onOpenLink,
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = codeBg,
+            contentColor = foreground,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.border(1.dp, rule, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp))) {
+                rows.forEachIndexed { rowIndex, row ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(if (rowIndex == 0) codeBg else Color.Transparent)
+                            .padding(horizontal = 12.dp, vertical = readerLineHeightDp() / 2f),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        row.forEach { cell ->
+                            ReaderText(
+                                text = readerAnnotatedString(cell, foreground, link, codeBg, readerFontFamily),
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = readerFontFamily,
+                                    fontSize = LocalReaderPresentation.current.bodySp.sp,
+                                    lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
+                                    fontWeight = if (rowIndex == 0) FontWeight.Bold else FontWeight.Normal,
+                                ),
+                                color = foreground,
+                                modifier = Modifier.weight(1f),
+                                onOpenLink = onOpenLink,
+                            )
+                        }
+                    }
+                    if (rowIndex < rows.lastIndex) HorizontalDivider(color = rule)
                 }
             }
-            if (rowIndex < rows.lastIndex) HorizontalDivider(color = rule)
         }
     }
 }
@@ -694,7 +750,7 @@ private fun TextStyle.readerTextMetrics(): TextStyle = copy(
     // block uses the same explicit line box.
     platformStyle = PlatformTextStyle(includeFontPadding = false),
     lineHeightStyle = LineHeightStyle(
-        alignment = LineHeightStyle.Alignment.Proportional,
+        alignment = LineHeightStyle.Alignment.Center,
         trim = LineHeightStyle.Trim.None,
     ),
 )
@@ -771,26 +827,44 @@ private val LiterataFontFamily = FontFamily(
     ),
 )
 
-private val AtkinsonHyperlegibleFontFamily = FontFamily(
-    Font(R.font.atkinson_hyperlegible_regular, weight = FontWeight.Normal),
-    Font(R.font.atkinson_hyperlegible_bold, weight = FontWeight.Bold),
-    Font(R.font.atkinson_hyperlegible_italic, weight = FontWeight.Normal, style = FontStyle.Italic),
-    Font(R.font.atkinson_hyperlegible_bold_italic, weight = FontWeight.Bold, style = FontStyle.Italic),
+private val AtkinsonHyperlegibleNextFontFamily = FontFamily(
+    Font(R.font.atkinson_hyperlegible_next_regular, weight = FontWeight.Normal),
+    Font(R.font.atkinson_hyperlegible_next_bold, weight = FontWeight.Bold),
+    Font(R.font.atkinson_hyperlegible_next_italic, weight = FontWeight.Normal, style = FontStyle.Italic),
+    Font(R.font.atkinson_hyperlegible_next_bold_italic, weight = FontWeight.Bold, style = FontStyle.Italic),
+)
+
+private val SourceSerif4FontFamily = FontFamily(
+    Font(R.font.source_serif_4_regular, weight = FontWeight.Normal),
+    Font(R.font.source_serif_4_bold, weight = FontWeight.Bold),
+    Font(R.font.source_serif_4_italic, weight = FontWeight.Normal, style = FontStyle.Italic),
+    Font(R.font.source_serif_4_bold_italic, weight = FontWeight.Bold, style = FontStyle.Italic),
+)
+
+private val InterFontFamily = FontFamily(
+    Font(R.font.inter_regular, weight = FontWeight.Normal),
+    Font(R.font.inter_bold, weight = FontWeight.Bold),
+    Font(R.font.inter_italic, weight = FontWeight.Normal, style = FontStyle.Italic),
+    Font(R.font.inter_bold_italic, weight = FontWeight.Bold, style = FontStyle.Italic),
 )
 
 internal val ReaderFont.fontFamily: FontFamily
     get() = when (this) {
         ReaderFont.NEWSREADER -> NewsreaderFontFamily
+        ReaderFont.SOURCE_SERIF_4 -> SourceSerif4FontFamily
         ReaderFont.LITERATA -> LiterataFontFamily
-        ReaderFont.ATKINSON -> AtkinsonHyperlegibleFontFamily
+        ReaderFont.ATKINSON_NEXT -> AtkinsonHyperlegibleNextFontFamily
+        ReaderFont.INTER -> InterFontFamily
         ReaderFont.SYSTEM_SANS -> FontFamily.SansSerif
     }
 
 private val ReaderFont.cssFamily: String
     get() = when (this) {
         ReaderFont.NEWSREADER -> "Newsreader"
+        ReaderFont.SOURCE_SERIF_4 -> "Source Serif 4"
         ReaderFont.LITERATA -> "Literata"
-        ReaderFont.ATKINSON -> "Atkinson Hyperlegible"
+        ReaderFont.ATKINSON_NEXT -> "Atkinson Hyperlegible Next"
+        ReaderFont.INTER -> "Inter"
         ReaderFont.SYSTEM_SANS -> "System Sans"
     }
 
@@ -839,6 +913,46 @@ private fun ReaderList(
 }
 
 @Composable
+private fun ReaderDefinitionList(
+    items: List<DefinitionItem>,
+    foreground: Color,
+    link: Color,
+    codeBg: Color,
+    readerFontFamily: FontFamily,
+    onOpenLink: (String) -> Unit,
+) {
+    Column(Modifier.padding(bottom = readerLineHeightDp())) {
+        items.forEach { item ->
+            ReaderText(
+                text = readerAnnotatedString(item.term, foreground, link, codeBg, readerFontFamily),
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontFamily = readerFontFamily,
+                    fontSize = LocalReaderPresentation.current.bodySp.sp,
+                    lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
+                    fontWeight = FontWeight.Bold,
+                ).readerTextMetrics(),
+                color = foreground,
+                modifier = Modifier.padding(bottom = readerLineHeightDp() / 2f),
+                onOpenLink = onOpenLink,
+            )
+            item.descriptions.forEach { description ->
+                ReaderText(
+                    text = readerAnnotatedString(description, foreground, link, codeBg, readerFontFamily),
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontFamily = readerFontFamily,
+                        fontSize = LocalReaderPresentation.current.bodySp.sp,
+                        lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
+                    ),
+                    color = foreground,
+                    modifier = Modifier.padding(start = 16.dp, bottom = readerLineHeightDp()),
+                    onOpenLink = onOpenLink,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun readerLineHeightDp(): androidx.compose.ui.unit.Dp {
     val lineHeight = LocalReaderPresentation.current.bodyLineSp
     return with(LocalDensity.current) {
@@ -857,11 +971,27 @@ private fun readerAnnotatedString(
         val style = SpanStyle(
             color = if (inline.href != null) link else foreground,
             fontFamily = if (inline.code) FontFamily.Monospace else readerFontFamily,
-            fontSize = if (inline.code) 17.sp else androidx.compose.ui.unit.TextUnit.Unspecified,
+            fontSize = when {
+                inline.code -> 16.sp
+                inline.script != ReaderScript.NONE -> 0.75.em
+                else -> androidx.compose.ui.unit.TextUnit.Unspecified
+            },
             fontWeight = if (inline.strong) FontWeight.Bold else null,
             fontStyle = if (inline.emphasis) FontStyle.Italic else null,
-            background = Color.Unspecified,
-            textDecoration = TextDecoration.None,
+            baselineShift = when (inline.script) {
+                ReaderScript.NONE -> null
+                ReaderScript.SUPERSCRIPT -> androidx.compose.ui.text.style.BaselineShift.Superscript
+                ReaderScript.SUBSCRIPT -> androidx.compose.ui.text.style.BaselineShift.Subscript
+            },
+            background = if (inline.highlighted) codeBg else Color.Unspecified,
+            textDecoration = when {
+                inline.underlined && inline.deleted -> TextDecoration.combine(
+                    listOf(TextDecoration.Underline, TextDecoration.LineThrough),
+                )
+                inline.underlined -> TextDecoration.Underline
+                inline.deleted -> TextDecoration.LineThrough
+                else -> TextDecoration.None
+            },
         )
         if (inline.href == null) {
             withStyle(style) { append(inline.text) }
@@ -915,7 +1045,9 @@ internal fun TextPost(
                         ).readerTextMetrics(),
                         color = foreground,
                         textAlign = TextAlign.Start,
-                        modifier = Modifier.semantics { heading() },
+                        modifier = Modifier
+                            .padding(top = 32.dp)
+                            .semantics { heading() },
                     )
                     Text(
                         text = story.by,

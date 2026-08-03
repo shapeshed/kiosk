@@ -129,6 +129,40 @@ class ReaderDocumentTest {
     }
 
     @Test
+    fun parseReaderArticlePreservesDefinitionListsAndTableCaptions() {
+        val blocks = parseReaderArticle(
+            title = null,
+            source = null,
+            contentHtml = """
+                <dl><dt>Term</dt><dd>Definition</dd></dl>
+                <table><caption>Results</caption><tr><th>Key</th><td>Value</td></tr></table>
+            """.trimIndent(),
+            baseUrl = "https://example.com/story",
+        ).blocks
+
+        val definitions = blocks[0] as ReaderBlock.DefinitionList
+        assertEquals("Term", definitions.items.single().term.joinToString("") { it.text })
+        assertEquals("Definition", definitions.items.single().descriptions.single().joinToString("") { it.text })
+        val table = blocks[1] as ReaderBlock.Table
+        assertEquals("Results", table.caption?.joinToString("") { it.text })
+    }
+
+    @Test
+    fun parseReaderArticlePreservesInlineSemanticText() {
+        val paragraph = parseReaderArticle(
+            title = null,
+            source = null,
+            contentHtml = "<p>x<sup>2</sup> <mark>important</mark> <u>underlined</u> <del>removed</del></p>",
+            baseUrl = "https://example.com/story",
+        ).blocks.single() as ReaderBlock.Paragraph
+
+        assertEquals(ReaderScript.SUPERSCRIPT, paragraph.text.single { it.text == "2" }.script)
+        assertTrue(paragraph.text.single { it.text == "important" }.highlighted)
+        assertTrue(paragraph.text.single { it.text == "underlined" }.underlined)
+        assertTrue(paragraph.text.single { it.text == "removed" }.deleted)
+    }
+
+    @Test
     fun parseReaderArticleSkipsBrowserHiddenMetadata() {
         val blocks = parseReaderArticle(
             title = null,

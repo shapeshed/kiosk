@@ -1069,7 +1069,12 @@ private fun ReaderBlock.readAloudParagraphs(): List<String> =
         is ReaderBlock.CodeBlock -> emptyList()
         is ReaderBlock.BulletedList -> items.map { it.plainText() }
         is ReaderBlock.NumberedList -> items.map { it.plainText() }
-        is ReaderBlock.Table -> rows.map { row -> row.joinToString(separator = ", ") { it.plainText() } }
+        is ReaderBlock.DefinitionList -> items.flatMap { item ->
+            listOf(item.term.plainText()) + item.descriptions.map { it.plainText() }
+        }
+        is ReaderBlock.Table -> listOfNotNull(caption?.plainText()) + rows.map { row ->
+            row.joinToString(separator = ", ") { it.plainText() }
+        }
         is ReaderBlock.Image -> emptyList()
         is ReaderBlock.Figure -> listOfNotNull(caption?.plainText())
         ReaderBlock.Divider -> emptyList()

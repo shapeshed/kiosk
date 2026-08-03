@@ -20,11 +20,22 @@ sealed interface ReaderBlock {
     data class CodeBlock(val text: String) : ReaderBlock
     data class BulletedList(val items: List<List<ReaderInline>>) : ReaderBlock
     data class NumberedList(val items: List<List<ReaderInline>>) : ReaderBlock
-    data class Table(val rows: List<List<List<ReaderInline>>>) : ReaderBlock
+    data class DefinitionList(val items: List<DefinitionItem>) : ReaderBlock
+    data class Table(
+        val rows: List<List<List<ReaderInline>>>,
+        val caption: List<ReaderInline>? = null,
+    ) : ReaderBlock
     data class Image(val src: String, val alt: String?) : ReaderBlock
     data class Figure(val images: List<Image>, val caption: List<ReaderInline>?) : ReaderBlock
     data object Divider : ReaderBlock
 }
+
+data class DefinitionItem(
+    val term: List<ReaderInline>,
+    val descriptions: List<List<ReaderInline>>,
+)
+
+enum class ReaderScript { NONE, SUPERSCRIPT, SUBSCRIPT }
 
 data class ReaderInline(
     val text: String,
@@ -32,6 +43,10 @@ data class ReaderInline(
     val strong: Boolean = false,
     val emphasis: Boolean = false,
     val code: Boolean = false,
+    val script: ReaderScript = ReaderScript.NONE,
+    val highlighted: Boolean = false,
+    val underlined: Boolean = false,
+    val deleted: Boolean = false,
 )
 
 fun parseReaderArticle(
@@ -70,6 +85,7 @@ private fun parseBlock(element: Element): List<ReaderBlock> =
             }.orEmpty()
             "ul" -> parseList(element)?.let { listOf(ReaderBlock.BulletedList(it)) }.orEmpty()
             "ol" -> parseList(element)?.let { listOf(ReaderBlock.NumberedList(it)) }.orEmpty()
+            "dl" -> parseDefinitionList(element)?.let { listOf(ReaderBlock.DefinitionList(it)) }.orEmpty()
             "img" -> parseImage(element)?.let(::listOf).orEmpty()
             "figure" -> parseFigure(element)
             "hr" -> listOf(ReaderBlock.Divider)
@@ -169,6 +185,32 @@ private fun parseList(element: Element): List<List<ReaderInline>>? {
     return items.takeIf { it.isNotEmpty() }
 }
 
+private fun parseDefinitionList(element: Element): List<DefinitionItem>? {
+    val items = buildList {
+        var term: List<ReaderInline>? = null
+        val descriptions = mutableListOf<List<ReaderInline>>()
+        fun flush() {
+            val currentTerm = term
+            if (currentTerm != null && descriptions.isNotEmpty()) {
+                add(DefinitionItem(currentTerm, descriptions.toList()))
+            }
+            term = null
+            descriptions.clear()
+        }
+        element.children().filterNot { it.isHiddenFromReader() }.forEach { child ->
+            when (child.normalName()) {
+                "dt" -> {
+                    flush()
+                    term = inlineText(child).toParagraphTextOrNull()
+                }
+                "dd" -> inlineText(child).toParagraphTextOrNull()?.let(descriptions::add)
+            }
+        }
+        flush()
+    }
+    return items.takeIf { it.isNotEmpty() }
+}
+
 private fun parseTable(element: Element): ReaderBlock.Table? {
     val rows = element.select("tr").mapNotNull { row ->
         val cells = row.children()
@@ -176,7 +218,11 @@ private fun parseTable(element: Element): ReaderBlock.Table? {
             .map(::inlineText)
         cells.takeIf { it.isNotEmpty() && it.any { cell -> cell.isNotEmpty() } }
     }
-    return rows.takeIf { it.isNotEmpty() }?.let(ReaderBlock::Table)
+    val caption = element.children()
+        .firstOrNull { it.normalName() == "caption" && !it.isHiddenFromReader() }
+        ?.let(::inlineText)
+        ?.toParagraphTextOrNull()
+    return rows.takeIf { it.isNotEmpty() }?.let { ReaderBlock.Table(rows = it, caption = caption) }
 }
 
 private fun inlineText(element: Element): List<ReaderInline> =
@@ -188,6 +234,10 @@ private fun parseInline(
     strong: Boolean = false,
     emphasis: Boolean = false,
     code: Boolean = false,
+    script: ReaderScript = ReaderScript.NONE,
+    highlighted: Boolean = false,
+    underlined: Boolean = false,
+    deleted: Boolean = false,
 ): List<ReaderInline> =
     when (node) {
         is TextNode -> listOf(
@@ -197,6 +247,10 @@ private fun parseInline(
                 strong = strong,
                 emphasis = emphasis,
                 code = code,
+                script = script,
+                highlighted = highlighted,
+                underlined = underlined,
+                deleted = deleted,
             ),
         )
         is Element -> {
@@ -226,6 +280,21 @@ private fun parseInline(
                     }
                     "code" -> node.childNodes().flatMap {
                         parseInline(it, href, styledStrong, styledEmphasis, code = true)
+                    }
+                    "sup" -> node.childNodes().flatMap {
+                        parseInline(it, href, styledStrong, styledEmphasis, code, ReaderScript.SUPERSCRIPT, highlighted, underlined, deleted)
+                    }
+                    "sub" -> node.childNodes().flatMap {
+                        parseInline(it, href, styledStrong, styledEmphasis, code, ReaderScript.SUBSCRIPT, highlighted, underlined, deleted)
+                    }
+                    "mark" -> node.childNodes().flatMap {
+                        parseInline(it, href, styledStrong, styledEmphasis, code, script, highlighted = true, underlined, deleted)
+                    }
+                    "u", "ins" -> node.childNodes().flatMap {
+                        parseInline(it, href, styledStrong, styledEmphasis, code, script, highlighted, underlined = true, deleted)
+                    }
+                    "s", "strike", "del" -> node.childNodes().flatMap {
+                        parseInline(it, href, styledStrong, styledEmphasis, code, script, highlighted, underlined, deleted = true)
                     }
                     "script", "style", "noscript" -> emptyList()
                     else -> node.childNodes().flatMap { parseInline(it, href, styledStrong, styledEmphasis, code) }
@@ -297,7 +366,11 @@ private fun List<ReaderInline>.normalizeInlineWhitespace(): List<ReaderInline> {
             previous.href == inline.href &&
             previous.strong == inline.strong &&
             previous.emphasis == inline.emphasis &&
-            previous.code == inline.code
+            previous.code == inline.code &&
+            previous.script == inline.script &&
+            previous.highlighted == inline.highlighted &&
+            previous.underlined == inline.underlined &&
+            previous.deleted == inline.deleted
         ) {
             output[output.lastIndex] = previous.copy(text = previous.text + text)
         } else {

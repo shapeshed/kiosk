@@ -137,6 +137,7 @@ fun ArticleScreen(
     val readerTheme by app.settings.readerTheme.collectAsStateWithLifecycle(ReaderTheme.SYSTEM)
     val readerFont by app.settings.readerFont.collectAsStateWithLifecycle(ReaderFont.NEWSREADER)
     val readerFontSize by app.settings.readerFontSize.collectAsStateWithLifecycle(ReaderFontSize.MEDIUM)
+    val readerFontSizeExplicit by app.settings.readerFontSizeExplicit.collectAsStateWithLifecycle(false)
     val readerJustify by app.settings.readerJustify.collectAsStateWithLifecycle(false)
     val readerLineSpacing by app.settings.readerLineSpacing.collectAsStateWithLifecycle(ReaderLineSpacing.STANDARD)
     val readerWidth by app.settings.readerWidth.collectAsStateWithLifecycle(ReaderWidth.WIDE)
@@ -144,7 +145,12 @@ fun ArticleScreen(
     val readAloudVoiceName by app.settings.readAloudVoiceName.collectAsStateWithLifecycle(null)
     val speedReaderWordsPerMinute by app.settings.speedReaderWordsPerMinute.collectAsStateWithLifecycle(350)
     val speedReaderTheme by app.settings.speedReaderTheme.collectAsStateWithLifecycle(ReaderTheme.DARK)
-    val speedReaderFont by app.settings.speedReaderFont.collectAsStateWithLifecycle(ReaderFont.ATKINSON)
+    val speedReaderFont by app.settings.speedReaderFont.collectAsStateWithLifecycle(ReaderFont.NEWSREADER)
+    val effectiveReaderFontSize = if (!readerFontSizeExplicit && readerFont == ReaderFont.NEWSREADER) {
+        ReaderFontSize.LARGE
+    } else {
+        readerFontSize
+    }
     val palette = readerPaletteFor(readerTheme, darkTheme)
     val fontFaceCss = rememberReaderFontFaceCss(readerFont)
     val pageBackground = android.graphics.Color.parseColor(palette.background)
@@ -314,7 +320,7 @@ fun ArticleScreen(
                     story = story,
                     palette = palette,
                     readerFont = readerFont,
-                    presentation = ReaderPresentation(readerFontSize, readerJustify, readerLineSpacing, readerWidth),
+                    presentation = ReaderPresentation(effectiveReaderFontSize, readerJustify, readerLineSpacing, readerWidth),
                     listState = nativeReaderListState,
                     topPad = readerTopPad.dp,
                     onScroll = { scrollY ->
@@ -352,7 +358,7 @@ fun ArticleScreen(
                             article = readyNativeReaderArticle,
                             palette = palette,
                             readerFont = readerFont,
-                    presentation = ReaderPresentation(readerFontSize, readerJustify, readerLineSpacing, readerWidth),
+                            presentation = ReaderPresentation(effectiveReaderFontSize, readerJustify, readerLineSpacing, readerWidth),
                             listState = nativeReaderListState,
                             topPad = readerTopPad.dp,
                             activeReadAloudBlockIndex = externalReadAloudBlockIndex ?: currentReadAloudBlockIndex,
@@ -787,7 +793,7 @@ fun ArticleScreen(
         AppearanceSheet(
             current = readerTheme,
             currentFont = readerFont,
-            currentFontSize = readerFontSize,
+            currentFontSize = effectiveReaderFontSize,
             currentJustify = readerJustify,
             currentLineSpacing = readerLineSpacing,
             currentWidth = readerWidth,

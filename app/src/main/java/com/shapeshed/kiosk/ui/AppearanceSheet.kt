@@ -319,8 +319,10 @@ internal fun FontChoiceRow(
 private val ReaderFont.label: String
     get() = when (this) {
         ReaderFont.NEWSREADER -> "Newsreader"
+        ReaderFont.SOURCE_SERIF_4 -> "Source Serif 4"
         ReaderFont.LITERATA -> "Literata"
-        ReaderFont.ATKINSON -> "Atkinson Hyperlegible"
+        ReaderFont.ATKINSON_NEXT -> "Atkinson Hyperlegible Next"
+        ReaderFont.INTER -> "Inter"
         ReaderFont.SYSTEM_SANS -> "System Sans"
     }
 
