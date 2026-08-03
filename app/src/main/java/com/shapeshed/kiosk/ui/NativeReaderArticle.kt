@@ -468,19 +468,21 @@ private fun ReaderBlockView(
                     }
                     .padding(start = 16.dp),
             ) {
-                block.blocks.forEachIndexed { index, child ->
-                    ReaderBlockView(
-                        block = child,
-                        foreground = muted,
-                        muted = muted,
-                        link = link,
-                        rule = rule,
-                        codeBg = codeBg,
-                        readerFontFamily = readerFontFamily,
-                        onOpenLink = onOpenLink,
-                        onOpenImage = onOpenImage,
-                        suppressTrailingSpacing = index == block.blocks.lastIndex,
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    block.blocks.forEachIndexed { index, child ->
+                        ReaderBlockView(
+                            block = child,
+                            foreground = muted,
+                            muted = muted,
+                            link = link,
+                            rule = rule,
+                            codeBg = codeBg,
+                            readerFontFamily = readerFontFamily,
+                            onOpenLink = onOpenLink,
+                            onOpenImage = onOpenImage,
+                            suppressTrailingSpacing = index == block.blocks.lastIndex,
+                        )
+                    }
                 }
             }
         }
