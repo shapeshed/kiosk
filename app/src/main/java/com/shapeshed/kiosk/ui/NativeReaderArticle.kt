@@ -384,6 +384,7 @@ private fun ReaderBlockView(
     readerFontFamily: FontFamily,
     onOpenLink: (String) -> Unit,
     onOpenImage: (src: String, alt: String?) -> Unit,
+    suppressTrailingSpacing: Boolean = false,
 ) {
     when (block) {
         is ReaderBlock.Heading -> {
@@ -444,14 +445,12 @@ private fun ReaderBlockView(
                 lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
             ),
             color = foreground,
-            modifier = Modifier.padding(bottom = readerLineHeightDp()),
+            modifier = Modifier.padding(bottom = if (suppressTrailingSpacing) 0.dp else readerLineHeightDp()),
             onOpenLink = onOpenLink,
         )
         is ReaderBlock.Quote -> Row(
             Modifier
-                // Child blocks provide the quote's trailing line-height; adding one here
-                // would leave an unintended blank line after the quotation.
-                .padding(top = 0.dp)
+                .padding(top = 0.dp, bottom = readerLineHeightDp())
                 .height(IntrinsicSize.Min),
         ) {
             Box(
@@ -461,9 +460,9 @@ private fun ReaderBlockView(
                     .background(rule),
             )
             Column(Modifier.padding(start = 16.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                block.blocks.forEach {
+                block.blocks.forEachIndexed { index, child ->
                     ReaderBlockView(
-                        block = it,
+                        block = child,
                         foreground = muted,
                         muted = muted,
                         link = link,
@@ -472,6 +471,7 @@ private fun ReaderBlockView(
                         readerFontFamily = readerFontFamily,
                         onOpenLink = onOpenLink,
                         onOpenImage = onOpenImage,
+                        suppressTrailingSpacing = index == block.blocks.lastIndex,
                     )
                 }
             }
