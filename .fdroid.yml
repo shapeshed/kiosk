@@ -1,3 +1,6 @@
+AntiFeatures:
+  TetheredNet:
+    en-US: Relies on the Hacker News API and Algolia HN Search API to provide stories, comments, feeds, and search results.
 Categories:
   - Internet
   - Reading
@@ -8,6 +11,20 @@ IssueTracker: https://github.com/shapeshed/kiosk/issues
 Changelog: https://github.com/shapeshed/kiosk/blob/HEAD/CHANGELOG.md
 
 AutoName: Kiosk
+
+Description: |-
+  Kiosk is a Hacker News reader for Android.
+
+  * Browse Top, New, Best, Ask, Show, and Jobs.
+  * Search historical Hacker News stories.
+  * Read articles in a native, distraction-free reader.
+  * Use reader themes, fonts, Speed Reader, Read Aloud, and zoomable article images.
+  * Open external links in the default app or browser.
+
+  The app uses the official Hacker News API for feeds, stories, and comments.
+  Historical search uses the Algolia HN Search API.
+
+  <i>TetheredNet:</i> Relies on the Hacker News API and Algolia HN Search API to provide stories, comments, feeds, and search results.
 
 RepoType: git
 Repo: https://github.com/shapeshed/kiosk.git

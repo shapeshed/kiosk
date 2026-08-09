@@ -4,7 +4,7 @@ Guidance for future agents working on Kiosk.
 
 ## Project
 
-Kiosk is a deliberately boring, durable Hacker News reader for Android, built with Kotlin,
+Kiosk is a durable Hacker News reader for Android, built with Kotlin,
 Gradle, and Jetpack Compose Material 3 Expressive. No accounts, no analytics, no tracking SDKs.
 The package/application id is:
 

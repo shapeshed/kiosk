@@ -6,7 +6,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 
 /**
  * Thin client over the official read-only Hacker News API, hosted on Firebase. No key, no auth —
- * a deliberately boring, long-lived dependency. All calls are blocking; run them off the main
+ * a stable, long-lived dependency. All calls are blocking; run them off the main
  * thread (the repository does, on Dispatchers.IO).
  *
  * See https://github.com/HackerNews/API
