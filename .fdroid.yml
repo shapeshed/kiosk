@@ -1,6 +1,6 @@
 AntiFeatures:
   TetheredNet:
-    en-US: Relies on the Hacker News API and Algolia HN Search API to provide stories, comments, feeds, and search results.
+    en-US: Relies on the Hacker News API and Algolia HN Search API.
 Categories:
   - Internet
   - Reading
@@ -24,7 +24,7 @@ Description: |-
   The app uses the official Hacker News API for feeds, stories, and comments.
   Historical search uses the Algolia HN Search API.
 
-  <i>TetheredNet:</i> Relies on the Hacker News API and Algolia HN Search API to provide stories, comments, feeds, and search results.
+  <i>TetheredNet:</i> Relies on the Hacker News API and Algolia HN Search API.
 
 RepoType: git
 Repo: https://github.com/shapeshed/kiosk.git
