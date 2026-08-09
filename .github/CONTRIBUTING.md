@@ -33,7 +33,7 @@ Build, test, and release instructions live in
    `feat(search): ...`.
 5. Open a pull request describing what changed and why. Link related issues.
 
-Keep the app reader-focused and deliberately boring. Avoid accounts,
+Keep the app reader-focused and minimal. Avoid accounts,
 analytics, tracking SDKs, Firebase, and unnecessary third-party libraries.
 Prefer the existing Kotlin, Compose, Material 3, and ViewModel patterns.
 
