@@ -17,12 +17,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -252,19 +255,63 @@ private fun SpeedReaderSettingsSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
             )
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ReaderFont.entries.forEach { font ->
-                    FontChoiceRow(
-                        font = font,
-                        selected = currentFont == font,
-                        onClick = { onSelectFont(font) },
-                    )
-                }
-            }
+            SpeedReaderFontPicker(current = currentFont, onSelect = onSelectFont)
             Spacer(Modifier.height(24.dp))
         }
     }
 }
+
+@Composable
+private fun SpeedReaderFontPicker(
+    current: ReaderFont,
+    onSelect: (ReaderFont) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Surface(
+            onClick = { expanded = true },
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                Text(
+                    text = current.speedReaderLabel,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontFamily = current.fontFamily),
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            ReaderFont.entries.forEach { font ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = font.speedReaderLabel,
+                            style = MaterialTheme.typography.bodyLarge.copy(fontFamily = font.fontFamily),
+                        )
+                    },
+                    onClick = {
+                        onSelect(font)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+private val ReaderFont.speedReaderLabel: String
+    get() = when (this) {
+        ReaderFont.NEWSREADER -> "Newsreader"
+        ReaderFont.SOURCE_SERIF_4 -> "Source Serif 4"
+        ReaderFont.LITERATA -> "Literata"
+        ReaderFont.ATKINSON_NEXT -> "Atkinson Hyperlegible Next"
+        ReaderFont.INTER -> "Inter"
+        ReaderFont.SYSTEM_SANS -> "System Sans"
+    }
 
 private fun Float.roundToNearest(step: Int): Float =
     (kotlin.math.round(this / step.toFloat()) * step).coerceIn(

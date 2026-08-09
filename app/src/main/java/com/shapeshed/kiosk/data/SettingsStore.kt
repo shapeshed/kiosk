@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -16,7 +17,21 @@ import kotlinx.coroutines.flow.map
 enum class ReaderTheme { SYSTEM, LIGHT, DARK, SEPIA }
 
 /** Reader body typeface choice. Monospace remains reserved for code blocks. */
-enum class ReaderFont { NEWSREADER, LITERATA, ATKINSON, SYSTEM_SANS }
+enum class ReaderFont { NEWSREADER, SOURCE_SERIF_4, LITERATA, ATKINSON_NEXT, INTER, SYSTEM_SANS }
+/** Reader sizes based on the Material 3 body and title type scale. */
+enum class ReaderFontSize(val sizeSp: Float, val lineHeightSp: Float) {
+    EXTRA_SMALL(12f, 16f),
+    SMALL(14f, 20f),
+    MEDIUM(16f, 24f),
+    LARGE(18f, 28f),
+    EXTRA_LARGE(20f, 28f),
+    DISPLAY(22f, 28f),
+}
+
+/** Line-height adjustments around the Material 3 baseline for each reader size. */
+enum class ReaderLineSpacing(val multiplier: Float) { COMPACT(0.9f), STANDARD(1f), RELAXED(1.15f) }
+/** Additional horizontal page margin in dp. */
+enum class ReaderWidth(val marginDp: Int) { WIDE(0), MEDIUM(8), NARROW(16), EXTRA_NARROW(24) }
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -25,6 +40,11 @@ class SettingsStore(private val context: Context) {
 
     private val readerThemeKey = stringPreferencesKey("reader_theme")
     private val readerFontKey = stringPreferencesKey("reader_font")
+    private val readerFontSizeKey = stringPreferencesKey("reader_font_size")
+    private val readerFontSizeExplicitKey = booleanPreferencesKey("reader_font_size_explicit")
+    private val readerJustifyKey = booleanPreferencesKey("reader_justify")
+    private val readerLineSpacingKey = stringPreferencesKey("reader_line_spacing")
+    private val readerWidthKey = stringPreferencesKey("reader_width")
     private val readAloudSpeechRateKey = floatPreferencesKey("read_aloud_speech_rate")
     private val readAloudVoiceNameKey = stringPreferencesKey("read_aloud_voice_name")
     private val speedReaderWordsPerMinuteKey = intPreferencesKey("speed_reader_words_per_minute")
@@ -61,6 +81,41 @@ class SettingsStore(private val context: Context) {
     suspend fun setReaderFont(font: ReaderFont) {
         context.dataStore.edit { it[readerFontKey] = font.name }
     }
+
+    val readerFontSize: Flow<ReaderFontSize> = context.dataStore.data.map { prefs ->
+        prefs[readerFontSizeKey]
+            ?.let { runCatching { ReaderFontSize.valueOf(it) }.getOrNull() }
+            ?: ReaderFontSize.MEDIUM
+    }
+
+    val readerFontSizeExplicit: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[readerFontSizeExplicitKey] ?: false
+    }
+
+    suspend fun setReaderFontSize(size: ReaderFontSize) {
+        context.dataStore.edit {
+            it[readerFontSizeKey] = size.name
+            it[readerFontSizeExplicitKey] = true
+        }
+    }
+
+    val readerJustify: Flow<Boolean> = context.dataStore.data.map { prefs -> prefs[readerJustifyKey] ?: false }
+
+    suspend fun setReaderJustify(justify: Boolean) {
+        context.dataStore.edit { it[readerJustifyKey] = justify }
+    }
+
+    val readerLineSpacing: Flow<ReaderLineSpacing> = context.dataStore.data.map { prefs ->
+        prefs[readerLineSpacingKey]?.let { runCatching { ReaderLineSpacing.valueOf(it) }.getOrNull() } ?: ReaderLineSpacing.STANDARD
+    }
+
+    suspend fun setReaderLineSpacing(spacing: ReaderLineSpacing) { context.dataStore.edit { it[readerLineSpacingKey] = spacing.name } }
+
+    val readerWidth: Flow<ReaderWidth> = context.dataStore.data.map { prefs ->
+        prefs[readerWidthKey]?.let { runCatching { ReaderWidth.valueOf(it) }.getOrNull() } ?: ReaderWidth.MEDIUM
+    }
+
+    suspend fun setReaderWidth(width: ReaderWidth) { context.dataStore.edit { it[readerWidthKey] = width.name } }
 
     val readAloudSpeechRate: Flow<Float> = context.dataStore.data.map { prefs ->
         (prefs[readAloudSpeechRateKey] ?: DEFAULT_READ_ALOUD_SPEECH_RATE).coerceIn(
@@ -123,7 +178,7 @@ class SettingsStore(private val context: Context) {
     val speedReaderFont: Flow<ReaderFont> = context.dataStore.data.map { prefs ->
         prefs[speedReaderFontKey]
             ?.let { runCatching { ReaderFont.valueOf(it) }.getOrNull() }
-            ?: ReaderFont.ATKINSON
+            ?: ReaderFont.NEWSREADER
     }
 
     suspend fun setSpeedReaderFont(font: ReaderFont) {
