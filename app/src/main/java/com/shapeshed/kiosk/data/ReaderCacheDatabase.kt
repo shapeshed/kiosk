@@ -5,11 +5,13 @@ import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.Insert
+import androidx.room.migration.Migration
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -50,19 +52,27 @@ interface ReaderExtractionDao {
 
 @Database(
     entities = [ReaderExtractionEntity::class],
-    version = 1,
+    version = 3,
     exportSchema = true,
 )
 abstract class ReaderCacheDatabase : RoomDatabase() {
     abstract fun readerExtractionDao(): ReaderExtractionDao
 
     companion object {
+        private val MIGRATION_1_3 = object : Migration(1, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) = Unit
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) = Unit
+        }
+
         fun create(context: Context): ReaderCacheDatabase =
             Room.databaseBuilder(
                 context.applicationContext,
                 ReaderCacheDatabase::class.java,
                 "reader_cache.db",
-            ).build()
+            ).addMigrations(MIGRATION_1_3, MIGRATION_2_3).build()
     }
 }
 
