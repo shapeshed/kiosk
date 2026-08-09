@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "6e43010fc4efa7bc3d93c92d3f0d39d9",
+    "identityHash": "55d4cc8b58af15b04c147c408cd2f500",
     "entities": [
       {
         "tableName": "reader_extractions",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`storyId` INTEGER NOT NULL, `url` TEXT NOT NULL, `title` TEXT, `contentHtml` TEXT NOT NULL, `textContent` TEXT NOT NULL, `extractedAtMillis` INTEGER NOT NULL, `lastAccessedMillis` INTEGER NOT NULL, `byteSize` INTEGER NOT NULL, `readerVersion` INTEGER NOT NULL, PRIMARY KEY(`storyId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`storyId` INTEGER NOT NULL, `url` TEXT NOT NULL, `title` TEXT, `contentHtml` TEXT NOT NULL, `textContent` TEXT NOT NULL, `extractedAtMillis` INTEGER NOT NULL, `lastAccessedMillis` INTEGER NOT NULL, `byteSize` INTEGER NOT NULL, `readerVersion` INTEGER NOT NULL, `ogImageUrl` TEXT, PRIMARY KEY(`storyId`))",
         "fields": [
           {
             "fieldPath": "storyId",
@@ -60,6 +60,11 @@
             "columnName": "readerVersion",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "ogImageUrl",
+            "columnName": "ogImageUrl",
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -72,7 +77,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6e43010fc4efa7bc3d93c92d3f0d39d9')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '55d4cc8b58af15b04c147c408cd2f500')"
     ]
   }
 }

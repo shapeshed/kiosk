@@ -661,8 +661,9 @@ private fun ReaderFigure(
         figure.caption?.let { caption ->
             ReaderText(
                 text = readerAnnotatedString(caption, muted, link, codeBg, readerFontFamily),
-                style = MaterialTheme.typography.bodySmall.copy(
+                style = MaterialTheme.typography.bodyMedium.copy(
                     fontFamily = readerFontFamily,
+                    lineHeight = LocalReaderPresentation.current.bodyLineSp.sp,
                 ),
                 color = muted,
                 modifier = Modifier.padding(top = readerLineHeightDp()),

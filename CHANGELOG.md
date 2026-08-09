@@ -12,7 +12,7 @@ should follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - GitLab CI and GitHub Actions release-prep workflows for quality, nightly, and tag builds.
 - Release signing support through environment variables.
 
-## [0.1.0] - 2026-07-30
+## [0.1.0] - 2026-08-09
 
 ### Added
 

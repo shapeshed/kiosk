@@ -85,6 +85,21 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private val FEEDS = Feed.entries
+private val storyRoundedRadius = 12.dp
+private val storySquareRadius = 4.dp
+private val storyFirstShape = RoundedCornerShape(
+    topStart = storyRoundedRadius,
+    topEnd = storyRoundedRadius,
+    bottomStart = storySquareRadius,
+    bottomEnd = storySquareRadius,
+)
+private val storyMiddleShape = RoundedCornerShape(storySquareRadius)
+private val storyLastShape = RoundedCornerShape(
+    topStart = storySquareRadius,
+    topEnd = storySquareRadius,
+    bottomStart = storyRoundedRadius,
+    bottomEnd = storyRoundedRadius,
+)
 
 /**
  * Home screen: a left-aligned title bar that hides as you scroll (Google News-style), a scrollable
@@ -465,14 +480,19 @@ private fun StoryList(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        itemsIndexed(stories, key = { _, story -> story.id }) { _, story ->
+        itemsIndexed(stories, key = { _, story -> story.id }) { index, story ->
             StoryCard(
                 story = story,
                 selected = story.id == selectedStoryId,
                 viewed = story.id in viewedIds,
-                shape = RoundedCornerShape(20.dp),
+                shape = when {
+                    stories.size == 1 -> MaterialTheme.shapes.medium
+                    index == 0 -> storyFirstShape
+                    index == stories.lastIndex -> storyLastShape
+                    else -> storyMiddleShape
+                },
                 onClick = { onOpenStory(story.id) },
             )
         }
@@ -511,8 +531,9 @@ private fun StoryCard(
         color = if (selected) {
             MaterialTheme.colorScheme.primaryContainer
         } else {
-            MaterialTheme.colorScheme.surfaceContainerLow
+            MaterialTheme.colorScheme.surface
         },
+        tonalElevation = if (selected) 0.dp else 1.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
         ListItem(
@@ -532,7 +553,7 @@ private fun StoryCard(
         ) {
             Text(
                 text = story.title,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleMedium,
                 // Unread stories are bold, like Gmail; opened ones render normal weight.
                 fontWeight = if (viewed) FontWeight.Normal else FontWeight.Bold,
                 color = titleColor,

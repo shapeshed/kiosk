@@ -1,10 +1,17 @@
 # Security Policy
 
-## Reporting A Vulnerability
+## Supported Versions
 
-Please do not open a public issue for a vulnerability.
+Kiosk has one active release line. Security fixes are made against the latest
+release; older versions are not patched separately.
 
-Email the maintainer privately at:
+## Reporting a Vulnerability
+
+Please do not open a public GitHub issue for security vulnerabilities.
+
+Instead, report it privately using
+[GitHub's private vulnerability reporting](https://github.com/shapeshed/kiosk/security/advisories/new),
+or by emailing:
 
 ```text
 security@shapeshed.com
@@ -12,9 +19,14 @@ security@shapeshed.com
 
 Include:
 
-- affected version or commit
-- device/Android version if relevant
-- reproduction steps
-- impact
+- A description of the vulnerability and its potential impact
+- Steps to reproduce it
+- The Kiosk version or commit affected
 
-You should receive an initial response within 7 days.
+You should expect an initial response within 5 business days. If the report is
+confirmed, a fix will be prepared before public disclosure.
+
+## Scope
+
+Kiosk does not include advertising, analytics, tracking SDKs, Firebase,
+Crashlytics, Google Play Services, or user accounts (see [PRIVACY.md](../PRIVACY.md)).
