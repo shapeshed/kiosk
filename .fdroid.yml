@@ -1,0 +1,26 @@
+Categories:
+  - Internet
+  - Reading
+License: Apache-2.0
+AuthorName: shapeshed
+SourceCode: https://github.com/shapeshed/kiosk
+IssueTracker: https://github.com/shapeshed/kiosk/issues
+Changelog: https://github.com/shapeshed/kiosk/blob/HEAD/CHANGELOG.md
+
+AutoName: Kiosk
+
+RepoType: git
+Repo: https://github.com/shapeshed/kiosk.git
+
+Builds:
+  - versionName: 0.1.0
+    versionCode: 1
+    commit: v0.1.0
+    subdir: app
+    gradle:
+      - yes
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 0.1.0
+CurrentVersionCode: 1

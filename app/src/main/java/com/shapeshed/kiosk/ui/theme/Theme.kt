@@ -8,13 +8,13 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.expressiveLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 /**
  * Material 3 Expressive theme, mirroring Aerial: the platform's dynamic (wallpaper-derived)
- * colours on Android 12+, and the expressive baseline schemes otherwise. Colour is deliberately
+ * colours on Android 12+, and the standard Material baseline schemes otherwise. Colour is deliberately
  * personal/adaptive per the M3 philosophy rather than a fixed brand palette; the HN orange lives
  * only in the launcher icon and splash. Motion uses MaterialExpressiveTheme's expressive default.
  */
@@ -31,7 +31,7 @@ fun KioskTheme(
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
         darkTheme -> darkColorScheme()
-        else -> expressiveLightColorScheme()
+        else -> lightColorScheme()
     }
 
     MaterialExpressiveTheme(

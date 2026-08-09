@@ -10,8 +10,6 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -52,25 +50,19 @@ interface ReaderExtractionDao {
 
 @Database(
     entities = [ReaderExtractionEntity::class],
-    version = 2,
+    version = 1,
     exportSchema = true,
 )
 abstract class ReaderCacheDatabase : RoomDatabase() {
     abstract fun readerExtractionDao(): ReaderExtractionDao
 
     companion object {
-        private val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE reader_extractions ADD COLUMN ogImageUrl TEXT")
-            }
-        }
-
         fun create(context: Context): ReaderCacheDatabase =
             Room.databaseBuilder(
                 context.applicationContext,
                 ReaderCacheDatabase::class.java,
                 "reader_cache.db",
-            ).addMigrations(MIGRATION_1_2).build()
+            ).build()
     }
 }
 
