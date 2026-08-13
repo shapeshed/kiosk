@@ -98,7 +98,7 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.11.0'
 
     // Adaptive list-detail layout (not part of the Compose BOM — versioned separately).
-    def adaptiveVersion = '1.3.0-rc01'
+    def adaptiveVersion = '1.3.0'
     implementation "androidx.compose.material3.adaptive:adaptive:$adaptiveVersion"
     implementation "androidx.compose.material3.adaptive:adaptive-layout:$adaptiveVersion"
     implementation "androidx.compose.material3.adaptive:adaptive-navigation:$adaptiveVersion"
