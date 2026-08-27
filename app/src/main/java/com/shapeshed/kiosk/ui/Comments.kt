@@ -55,7 +55,7 @@ internal fun CommentsModalSheet(
         dragHandle = { CommentsSheetHandle(commentCount, onDismiss) },
     ) {
         // Bound the height so the LazyColumn has a fixed frame to scroll within.
-        Column(Modifier.fillMaxWidth().fillMaxHeight(0.94f)) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight()) {
             HorizontalDivider()
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                 when (state) {
