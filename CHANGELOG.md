@@ -5,12 +5,16 @@ All notable changes to Kiosk will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers
 should follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.1] - 2026-09-06
 
 ### Added
 
 - GitLab CI and GitHub Actions release-prep workflows for quality, nightly, and tag builds.
 - Release signing support through environment variables.
+
+### Fixed
+
+- Prevented comment-sheet scroll jitter by giving the comments list a stable full-height frame. Thanks to [@valonsodev](https://github.com/valonsodev) for the contribution in [PR #62](https://github.com/shapeshed/kiosk/pull/62).
 
 ## [0.1.0] - 2026-08-09
 
